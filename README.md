@@ -86,6 +86,10 @@ refresh in one click. Titles, totals, formulas, charts and formatting around the
   formula is left for Excel to recompute.
 - Templates are saved with `context.workbook.settings`, which stores them **inside the .xlsx**. Mail
   the workbook to a colleague and their copy of the add-in sees the same template.
+- After writing, the refresh recalculates the workbook and refreshes every PivotTable (both
+  optional). Charts pick up changed values automatically; a chart will only follow the data as it
+  *grows* if its zone is an Excel **table**, because a chart bound to a fixed `A1:D100` range keeps
+  that range. Prefer a table zone for anything a chart or pivot reads.
 
 ---
 
