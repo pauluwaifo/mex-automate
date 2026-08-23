@@ -1,12 +1,13 @@
 import * as React from "react";
 import { makeStyles, Tab, TabList, tokens } from "@fluentui/react-components";
 
+import ChartPanel from "./ChartPanel";
 import CleanPanel from "./CleanPanel";
 import FormulaPanel from "./FormulaPanel";
 import MergePanel from "./MergePanel";
 import ReportPanel from "./ReportPanel";
 
-type TabId = "clean" | "merge" | "formulas" | "reports";
+type TabId = "clean" | "merge" | "charts" | "formulas" | "reports";
 
 const useStyles = makeStyles({
   root: {
@@ -41,6 +42,7 @@ const App: React.FC = () => {
       >
         <Tab value="clean">Clean</Tab>
         <Tab value="merge">Merge</Tab>
+        <Tab value="charts">Charts</Tab>
         <Tab value="formulas">Formulas</Tab>
         <Tab value="reports">Reports</Tab>
       </TabList>
@@ -50,6 +52,7 @@ const App: React.FC = () => {
       <div className={styles.body}>
         {tab === "clean" ? <CleanPanel /> : null}
         {tab === "merge" ? <MergePanel /> : null}
+        {tab === "charts" ? <ChartPanel /> : null}
         {tab === "formulas" ? <FormulaPanel /> : null}
         {tab === "reports" ? <ReportPanel /> : null}
       </div>

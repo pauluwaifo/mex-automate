@@ -1,5 +1,16 @@
 import * as React from "react";
-import { Button, Checkbox, Field, Input, Radio, RadioGroup, Text, Textarea } from "@fluentui/react-components";
+import {
+  Button,
+  Checkbox,
+  Dropdown,
+  Field,
+  Input,
+  Option,
+  Radio,
+  RadioGroup,
+  Text,
+  Textarea,
+} from "@fluentui/react-components";
 
 import {
   DEFAULT_MERGE_OPTIONS,
@@ -9,6 +20,7 @@ import {
   mergeSheets,
   parseAliasLines,
   previewSheetMerge,
+  SOURCE_COLUMN_HEADER,
 } from "../features/merge";
 import { SUPPORTED_EXTENSIONS } from "../shared/workbookReader";
 import { ResultBanner, RunButton, Section, useActionRunner, useSharedStyles } from "./ui";
@@ -31,6 +43,8 @@ const MergePanel: React.FC = () => {
     DEFAULT_MERGE_OPTIONS.destinationSheetName
   );
   const [aliasText, setAliasText] = React.useState("");
+  const [sortByHeader, setSortByHeader] = React.useState("");
+  const [sortDescending, setSortDescending] = React.useState(false);
 
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -44,8 +58,16 @@ const MergePanel: React.FC = () => {
       skipBlankRows,
       destinationSheetName,
       headerAliases: parseAliasLines(aliasText),
+      sortByHeader,
+      sortDescending,
     }),
-    [addSourceColumn, skipBlankRows, destinationSheetName, aliasText]
+    [addSourceColumn, skipBlankRows, destinationSheetName, aliasText, sortByHeader, sortDescending]
+  );
+
+  // Only offer sort columns once a preview has told us what the merged headers are.
+  const sortableHeaders = React.useMemo(
+    () => (plan ? (addSourceColumn ? [SOURCE_COLUMN_HEADER, ...plan.headers] : plan.headers) : []),
+    [plan, addSourceColumn]
   );
 
   const toggleSheet = (name: string, checked: boolean) => {
@@ -162,6 +184,36 @@ const MergePanel: React.FC = () => {
             onChange={(_event, data) => setDestinationSheetName(data.value)}
           />
         </Field>
+        <Field
+          label="Sort the merged rows by"
+          hint={
+            sortableHeaders.length === 0
+              ? "Preview the columns first to choose a sort column."
+              : undefined
+          }
+        >
+          <Dropdown
+            placeholder="Source order"
+            value={sortByHeader}
+            selectedOptions={sortByHeader ? [sortByHeader] : []}
+            disabled={sortableHeaders.length === 0}
+            onOptionSelect={(_event, data) => setSortByHeader(String(data.optionValue))}
+          >
+            <Option value="">Source order</Option>
+            {sortableHeaders.map((header) => (
+              <Option key={header} value={header}>
+                {header}
+              </Option>
+            ))}
+          </Dropdown>
+        </Field>
+        {sortByHeader ? (
+          <Checkbox
+            label="Largest / Z-A first"
+            checked={sortDescending}
+            onChange={(_event, data) => setSortDescending(Boolean(data.checked))}
+          />
+        ) : null}
         <Field
           label="Header aliases"
           hint="One per line, as: Client Name = Customer. Use this when sources name the same column differently."

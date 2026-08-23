@@ -1,5 +1,7 @@
 import {
   buildMergedTable,
+  compareCells,
+  compareCellsDirected,
   DEFAULT_MERGE_OPTIONS,
   describePlan,
   parseAliasLines,
@@ -146,6 +148,120 @@ describe("buildMergedTable", () => {
     const plan = planHeaders([short]);
     const merged = buildMergedTable([short], plan, mergeDefaults);
     expect(merged.grid[1]).toEqual(["x", null]);
+  });
+});
+
+describe("sorting the merged table", () => {
+  const plan = planHeaders([january, february]);
+
+  it("leaves rows in source order by default", () => {
+    const merged = buildMergedTable([january, february], plan, mergeDefaults);
+    expect(merged.grid.slice(1).map((row) => row[2])).toEqual([100, 250, 400]);
+  });
+
+  it("sorts by a chosen column, keeping the header first", () => {
+    const merged = buildMergedTable([january, february], plan, {
+      ...mergeDefaults,
+      sortByHeader: "Amount",
+      sortDescending: true,
+    });
+    expect(merged.grid[0]).toEqual(["Order ID", "Customer", "Amount", "Region"]);
+    expect(merged.grid.slice(1).map((row) => row[2])).toEqual([400, 250, 100]);
+  });
+
+  it("sorts text naturally and case-insensitively", () => {
+    const merged = buildMergedTable([january, february], plan, {
+      ...mergeDefaults,
+      sortByHeader: "Customer",
+    });
+    expect(merged.grid.slice(1).map((row) => row[1])).toEqual(["Acme", "Beta", "Gamma"]);
+  });
+
+  it("keeps each row's number formats attached to it when sorting", () => {
+    const first: SourceTable = {
+      label: "First",
+      headers: ["Amount"],
+      rows: [[300], [100]],
+      numberFormats: [["#,##0.00"], ["0%"]],
+    };
+    const merged = buildMergedTable([first], planHeaders([first]), {
+      ...mergeDefaults,
+      sortByHeader: "Amount",
+    });
+    expect(merged.grid.slice(1)).toEqual([[100], [300]]);
+    // The "0%" format belonged to the 100 row and must have travelled with it.
+    expect(merged.numberFormats.slice(1)).toEqual([["0%"], ["#,##0.00"]]);
+  });
+
+  it("pushes blank cells to the end in both directions", () => {
+    const sparse: SourceTable = {
+      label: "Sparse",
+      headers: ["Amount"],
+      rows: [[5], [null], [1]],
+    };
+    const ascending = buildMergedTable([sparse], planHeaders([sparse]), {
+      ...mergeDefaults,
+      skipBlankRows: false,
+      sortByHeader: "Amount",
+    });
+    expect(ascending.grid.slice(1)).toEqual([[1], [5], [null]]);
+
+    const descending = buildMergedTable([sparse], planHeaders([sparse]), {
+      ...mergeDefaults,
+      skipBlankRows: false,
+      sortByHeader: "Amount",
+      sortDescending: true,
+    });
+    expect(descending.grid.slice(1)).toEqual([[5], [1], [null]]);
+  });
+
+  it("ignores a sort column that is not in the merged headers", () => {
+    const merged = buildMergedTable([january, february], plan, {
+      ...mergeDefaults,
+      sortByHeader: "Nope",
+    });
+    expect(merged.grid.slice(1).map((row) => row[2])).toEqual([100, 250, 400]);
+  });
+
+  it("can sort by the Source column", () => {
+    const merged = buildMergedTable([january, february], plan, {
+      ...mergeDefaults,
+      addSourceColumn: true,
+      sortByHeader: SOURCE_COLUMN_HEADER,
+    });
+    expect(merged.grid.slice(1).map((row) => row[0])).toEqual(["February", "January", "January"]);
+  });
+});
+
+describe("compareCells", () => {
+  it("orders numbers numerically and text alphabetically", () => {
+    expect(compareCells(1, 2)).toBeLessThan(0);
+    expect(compareCells(10, 9)).toBeGreaterThan(0);
+    expect(compareCells("apple", "banana")).toBeLessThan(0);
+  });
+
+  it("puts blanks last whichever way round they are compared", () => {
+    expect(compareCells(null, 1)).toBeGreaterThan(0);
+    expect(compareCells(1, null)).toBeLessThan(0);
+    expect(compareCells("", 1)).toBeGreaterThan(0);
+    expect(compareCells(null, "")).toBe(0);
+  });
+
+  it("compares text case-insensitively", () => {
+    expect(compareCells("apple", "APPLE")).toBe(0);
+  });
+});
+
+describe("compareCellsDirected", () => {
+  it("reverses the order when descending", () => {
+    expect(compareCellsDirected(1, 2, false)).toBeLessThan(0);
+    expect(compareCellsDirected(1, 2, true)).toBeGreaterThan(0);
+  });
+
+  it("keeps blanks last in both directions", () => {
+    expect(compareCellsDirected(null, 1, false)).toBeGreaterThan(0);
+    expect(compareCellsDirected(null, 1, true)).toBeGreaterThan(0);
+    expect(compareCellsDirected(1, null, true)).toBeLessThan(0);
   });
 });
 

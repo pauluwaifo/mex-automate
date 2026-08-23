@@ -1,7 +1,8 @@
 # MEx Automate
 
 An Excel task pane add-in that automates repetitive spreadsheet work: cleaning data, merging
-sheets and files, filling formula patterns, and refreshing report templates.
+sheets and files, building charts and summary tables, filling formula patterns, and refreshing
+report templates.
 
 Everything runs client-side inside the Excel add-in sandbox. There is no backend, no account, no
 AI/API cost, and no data leaves the machine — including the .xlsx and .csv files you merge, which
@@ -65,8 +66,35 @@ in one column. When sources genuinely disagree, add an alias:
 Client Name = Customer
 ```
 
-Preview the planned column layout before committing, optionally tag each row with its source, and
-skip blank rows. Number formats (dates, currency, percentages) carry across from each source.
+Preview the planned column layout before committing, optionally tag each row with its source, sort
+the result by any column, and skip blank rows. Number formats (dates, currency, percentages) carry
+across from each source.
+
+The result lands on a **new sheet** as a real Excel table with a frozen header row and auto-fitted
+columns, ready to filter, chart or feed into the Reports tab.
+
+### Charts
+Build column, bar, line, area, pie, doughnut and scatter charts from any sheet, table or selection.
+
+Raw rows rarely chart well, so the Charts tab **summarizes first** by default: group by one column,
+then Sum / Average / Count / Count unique / Min / Max one or more others. That turns 4,000 order
+lines into "Sum of Amount by Region" and charts *that*. Turn the summary off if your range is
+already a small table of totals.
+
+- Sort categories largest-first or alphabetically, and cap them at a **top N** with everything else
+  rolled into a single "Other" slice — the difference between a readable pie and forty slivers.
+- Numbers stored as text (`"1,234.50"`, `"(50)"`) are read as numbers; anything genuinely
+  non-numeric is skipped and reported rather than silently counted as zero.
+- **Build summary table only** produces the grouped table without a chart.
+- The summary table is always written to the sheet next to the chart. An Office.js chart must bind
+  to a real range, and it means the numbers behind the picture stay visible and auditable.
+
+Charts can go on a new sheet or beside the source data, with a title, legend position and optional
+value labels. Aggregated columns inherit the source column's number format, so a currency column
+still totals as currency.
+
+> Combining sheets and charting are designed to work together: **Merge** several sheets into one
+> table, then point **Charts** at that merged sheet.
 
 ### Formulas
 - **Fill a formula across a range** — select the cell with your formula plus the cells to fill. The
@@ -100,9 +128,10 @@ src/
   taskpane/
     index.tsx                  React entry point; follows the Office theme
     components/
-      App.tsx                  Tab shell (Clean / Merge / Formulas / Reports)
-      CleanPanel.tsx           …one panel per feature
+      App.tsx                  Tab shell (Clean / Merge / Charts / Formulas / Reports)
+      CleanPanel.tsx           ...one panel per feature
       MergePanel.tsx
+      ChartPanel.tsx
       FormulaPanel.tsx
       ReportPanel.tsx
       ui.tsx                   Section, ResultBanner, useActionRunner, RunButton
@@ -110,6 +139,7 @@ src/
     features/
       dataCleaning.ts          Pure transforms + Office.js drivers
       merge.ts                 Header planning + merge drivers
+      charts.ts                Aggregation + chart drivers
       formulaPatterns.ts       A1 translation + template library
       reportBuilder.ts         Zone mapping + refresh engine
     shared/
@@ -117,7 +147,7 @@ src/
       templateStore.ts         Template persistence in workbook settings
       workbookReader.ts        .xlsx / .csv parsing
       types.ts                 Shared domain types
-tests/                         Jest unit tests (142)
+tests/                         Jest unit tests (179)
 manifest.xml                   Add-in manifest
 ```
 
@@ -131,8 +161,9 @@ write back. Every driver returns the same `OperationResult` shape, which is what
 npm test
 ```
 
-142 unit tests cover the pure logic: grid transforms, dedupe keying, date parsing and Excel serial
-conversion, header planning and merging, CSV parsing, A1 formula translation, and column mapping.
+179 unit tests cover the pure logic: grid transforms, dedupe keying, date parsing and Excel serial
+conversion, header planning, merging and sorting, grouped aggregation and chart validation, CSV
+parsing, A1 formula translation, and column mapping.
 
 Anything that calls Office.js is verified by sideloading (`npm start`) — mocking the Office.js proxy
 object model produces tests that pass while the real thing fails, so it is deliberately not mocked.

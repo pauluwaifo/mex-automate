@@ -52,6 +52,9 @@ export interface MergeOptions {
   headerAliases: Record<string, string>;
   /** Name for the sheet the merged table is written to. */
   destinationSheetName: string;
+  /** Output header to sort the merged rows by. Empty keeps source order. */
+  sortByHeader: string;
+  sortDescending: boolean;
 }
 
 export const DEFAULT_MERGE_OPTIONS: MergeOptions = {
@@ -59,7 +62,44 @@ export const DEFAULT_MERGE_OPTIONS: MergeOptions = {
   skipBlankRows: true,
   headerAliases: {},
   destinationSheetName: "Merged",
+  sortByHeader: "",
+  sortDescending: false,
 };
+
+/** Layout choices `buildMergedTable` needs; sorting is optional. */
+export type MergeLayoutOptions = Pick<MergeOptions, "addSourceColumn" | "skipBlankRows"> &
+  Partial<Pick<MergeOptions, "sortByHeader" | "sortDescending">>;
+
+function isBlankSortValue(value: CellValue): boolean {
+  return value === null || value === "";
+}
+
+/**
+ * Order two cells the way a spreadsheet user expects: numbers numerically, text
+ * alphabetically and case-insensitively, blanks last.
+ */
+export function compareCells(a: CellValue, b: CellValue): number {
+  if (isBlankSortValue(a) || isBlankSortValue(b)) {
+    return isBlankSortValue(a) && isBlankSortValue(b) ? 0 : isBlankSortValue(a) ? 1 : -1;
+  }
+  if (typeof a === "number" && typeof b === "number") {
+    return a - b;
+  }
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+}
+
+/**
+ * `compareCells` with a direction. Blanks stay at the bottom either way -
+ * simply negating the comparison would float every empty cell to the top, which
+ * is never what someone sorting a merged table wants.
+ */
+export function compareCellsDirected(a: CellValue, b: CellValue, descending: boolean): number {
+  if (isBlankSortValue(a) || isBlankSortValue(b)) {
+    return isBlankSortValue(a) && isBlankSortValue(b) ? 0 : isBlankSortValue(a) ? 1 : -1;
+  }
+  const result = compareCells(a, b);
+  return descending ? -result : result;
+}
 
 /**
  * Parse the alias box, one rule per line, written as
@@ -162,7 +202,7 @@ export interface MergedTable {
 export function buildMergedTable(
   sources: readonly SourceTable[],
   plan: HeaderPlan,
-  options: Pick<MergeOptions, "addSourceColumn" | "skipBlankRows">
+  options: MergeLayoutOptions
 ): MergedTable {
   const offset = options.addSourceColumn ? 1 : 0;
   const width = plan.headers.length + offset;
@@ -206,6 +246,31 @@ export function buildMergedTable(
 
     rowsPerSource[source.label] = (rowsPerSource[source.label] ?? 0) + written;
   });
+
+  const sortColumn = options.sortByHeader ? headerRow.indexOf(options.sortByHeader) : -1;
+  if (sortColumn >= 0 && grid.length > 2) {
+    // Sort an index permutation so values and their number formats stay paired.
+    const order = grid
+      .slice(1)
+      .map((_row, index) => index + 1)
+      .sort((left, right) =>
+        compareCellsDirected(
+          grid[left][sortColumn],
+          grid[right][sortColumn],
+          Boolean(options.sortDescending)
+        )
+      );
+
+    const sortedGrid: Grid = [headerRow, ...order.map((index) => grid[index])];
+    const sortedFormats: string[][] = [
+      numberFormats[0],
+      ...order.map((index) => numberFormats[index]),
+    ];
+    grid.length = 0;
+    grid.push(...sortedGrid);
+    numberFormats.length = 0;
+    numberFormats.push(...sortedFormats);
+  }
 
   return { grid, numberFormats, rowsPerSource, totalRows: grid.length - 1 };
 }
@@ -302,6 +367,8 @@ async function writeMergedTable(
   );
   table.name = `MExMerged_${Date.now()}`;
   sheet.getUsedRange().format.autofitColumns();
+  // Keep the headers on screen while scrolling a long merged table.
+  sheet.freezePanes.freezeRows(1);
   sheet.activate();
   await context.sync();
 
