@@ -37,6 +37,7 @@ npm start          # builds, trusts the dev certificate, and sideloads into Exce
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` / `lint:fix` | ESLint (flat config) + Prettier |
 | `npm run validate` | Validate `manifest.xml` |
+| `npm run sample` | Write sample test data into `samples/` |
 
 ---
 
@@ -170,6 +171,36 @@ object model produces tests that pass while the real thing fails, so it is delib
 
 > If the test runner crashes with a native V8 error, run `npx jest --runInBand`. That is memory
 > pressure from parallel workers, not a test failure.
+
+### Trying it in Excel
+
+```bash
+npm run sample     # writes samples/ with a deliberately messy test workbook
+npm start          # sideloads the add-in and opens Excel
+```
+
+The first `npm start` installs and asks you to trust a certificate for
+`https://localhost` — say yes, or the task pane loads blank. Then open
+`samples/MEx-Automate-Test.xlsx` and click **Home → MEx Automate → Automate**.
+
+The sample workbook is built to exercise every tab:
+
+| Tab | What to try | What should happen |
+| --- | --- | --- |
+| Clean | On **Jan Orders**, click one cell, then Remove duplicates | Order 4 appears twice; one copy goes |
+| Clean | Trim whitespace, then Proper Case | `"  Acme Ltd "`, `"ACME LTD"` and `"Acme Ltd"` become one spelling |
+| Clean | Standardize dates (day-first **on**) | `2024-01-05`, `06/01/2024`, `Jan 7, 2024` and `10-Jan-2024` all become real dates in one format |
+| Merge | Tick all three order sheets → Preview columns | `order_id`/`Order ID` collapse to one column; `Channel` is flagged as partial |
+| Merge | Add alias `Client Name = Customer`, sort by Amount | Mar's client column folds into Customer; result is a sorted table on a new sheet |
+| Merge | Switch to Files, pick both CSVs from `samples/` | The semicolon-delimited May file is detected automatically |
+| Charts | Source = the merged sheet, group by Region, Sum of Amount, Pie | A summary table plus a pie of totals by region |
+| Charts | Turn on Top N = 3 | Smaller regions collapse into one "Other" slice |
+| Formulas | Select `G1:G9` on Jan Orders, put `=E2*2` in G1, Fill formula | Preview shows the last cell before you commit |
+| Reports | On **Sales Report**, select `A3:E6`, name a zone `SalesData`, source = Jan Orders, Refresh | Rows are replaced; the title, the `Total` row and column E's formula all survive |
+
+`npm stop` unregisters the add-in when you are done.
+
+Sample files are gitignored — regenerate them any time with `npm run sample`.
 
 ---
 
