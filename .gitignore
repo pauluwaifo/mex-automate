@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+
+# Office add-in dev tooling
+.office-addin-debugging.json
+*.log
+npm-debug.log*
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
