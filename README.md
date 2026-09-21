@@ -29,7 +29,7 @@ npm start          # builds, trusts the dev certificate, and sideloads into Exce
 
 | Script | What it does |
 | --- | --- |
-| `npm start` | Sideload into Excel with a live dev server on https://localhost:3000 |
+| `npm start` | Sideload into Excel with a live dev server on https://localhost:3100 |
 | `npm stop` | Stop debugging and remove the sideloaded add-in |
 | `npm run dev-server` | Dev server only, without sideloading |
 | `npm run build` | Production bundle into `dist/` |
@@ -239,7 +239,7 @@ submission otherwise:
 - [ ] `GetStarted.LearnMoreUrl` — currently `https://www.example.com/mex-automate/help`
 - [ ] `assets/*.png` — still the icons from the Yeoman scaffold; replace with your own
 - [ ] Host the built `dist/` on HTTPS and set `urlProd` in `webpack.config.js` to that origin
-      (the production build rewrites `https://localhost:3000/` to it)
+      (the production build rewrites `https://localhost:3100/` to it)
 - [ ] Add a `LICENSE` and a privacy policy URL
 
 `<Id>` is already a unique GUID for this add-in — keep it stable across versions.
