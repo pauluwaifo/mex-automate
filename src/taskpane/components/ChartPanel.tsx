@@ -1,24 +1,31 @@
 import * as React from "react";
 import {
-  Checkbox,
   Dropdown,
   Field,
   Input,
   Option,
-  OptionGroup,
   Radio,
   RadioGroup,
+  Switch,
   Text,
 } from "@fluentui/react-components";
+import {
+  DataArea24Regular,
+  DataBarHorizontal24Regular,
+  DataBarVertical24Regular,
+  DataLine24Regular,
+  DataPie24Regular,
+  DataScatter24Regular,
+  TableSimple20Regular,
+} from "@fluentui/react-icons";
 
 import {
   Aggregation,
   AGGREGATIONS,
-  CHART_TYPES,
+  aggregationLabel,
   ChartRequest,
   createChart,
   DataSourceRef,
-  findChartType,
   LegendPosition,
   listSourceOptions,
   readSourceHeaders,
@@ -28,16 +35,57 @@ import {
   SummarizeRequest,
   validateChartRequest,
 } from "../features/charts";
-import { ResultBanner, RunButton, Section, useActionRunner, useSharedStyles } from "./ui";
+import {
+  ActionButton,
+  Choice,
+  ChoiceGrid,
+  MoreOptions,
+  Step,
+  Tip,
+  useActionRunner,
+  useSharedStyles,
+} from "./ui";
+import { useSelectionVersion } from "./useSelection";
 
-const CHART_GROUPS = ["Column & bar", "Line & area", "Pie", "Scatter"] as const;
+/** The chart shapes offered up front; stacking is a separate switch. */
+type Shape = "column" | "bar" | "line" | "area" | "pie" | "doughnut" | "scatter";
+
+const SHAPES: Array<Choice<Shape>> = [
+  { value: "column", label: "Column", icon: <DataBarVertical24Regular /> },
+  { value: "bar", label: "Bar", icon: <DataBarHorizontal24Regular /> },
+  { value: "line", label: "Line", icon: <DataLine24Regular /> },
+  { value: "pie", label: "Pie", icon: <DataPie24Regular /> },
+  { value: "doughnut", label: "Doughnut", icon: <DataPie24Regular /> },
+  { value: "area", label: "Area", icon: <DataArea24Regular /> },
+  { value: "scatter", label: "Scatter", icon: <DataScatter24Regular /> },
+];
+
+const STACKABLE: ReadonlySet<Shape> = new Set(["column", "bar", "area"]);
+const ONE_SERIES: ReadonlySet<Shape> = new Set(["pie", "doughnut"]);
+
+function chartTypeIdFor(shape: Shape, stacked: boolean): string {
+  switch (shape) {
+    case "column":
+      return stacked ? "columnStacked" : "columnClustered";
+    case "bar":
+      return stacked ? "barStacked" : "barClustered";
+    case "area":
+      return stacked ? "areaStacked" : "area";
+    case "line":
+      return "lineMarkers";
+    case "scatter":
+      return "xyscatter";
+    default:
+      return shape;
+  }
+}
 
 const SORT_ORDERS: Array<{ value: SortOrder; label: string }> = [
-  { value: "valueDesc", label: "Largest first" },
+  { value: "valueDesc", label: "Biggest first" },
   { value: "valueAsc", label: "Smallest first" },
-  { value: "categoryAsc", label: "Category A-Z" },
-  { value: "categoryDesc", label: "Category Z-A" },
-  { value: "none", label: "Source order" },
+  { value: "categoryAsc", label: "A to Z" },
+  { value: "categoryDesc", label: "Z to A" },
+  { value: "none", label: "As they appear in the data" },
 ];
 
 const LEGEND_POSITIONS: Array<{ value: LegendPosition; label: string }> = [
@@ -45,15 +93,18 @@ const LEGEND_POSITIONS: Array<{ value: LegendPosition; label: string }> = [
   { value: "bottom", label: "Bottom" },
   { value: "top", label: "Top" },
   { value: "left", label: "Left" },
-  { value: "none", label: "No legend" },
+  { value: "none", label: "Hide the legend" },
 ];
+
+const SELECTION_KEY = "selection";
 
 const ChartPanel: React.FC = () => {
   const styles = useSharedStyles();
   const runner = useActionRunner();
+  const selectionVersion = useSelectionVersion();
 
   const [sources, setSources] = React.useState<SourceOption[]>([]);
-  const [sourceKey, setSourceKey] = React.useState("selection");
+  const [sourceKey, setSourceKey] = React.useState(SELECTION_KEY);
   const [headers, setHeaders] = React.useState<string[]>([]);
 
   const [summarize, setSummarize] = React.useState(true);
@@ -62,19 +113,19 @@ const ChartPanel: React.FC = () => {
   const [aggregation, setAggregation] = React.useState<Aggregation>("sum");
   const [sort, setSort] = React.useState<SortOrder>("valueDesc");
   const [limitCategories, setLimitCategories] = React.useState(false);
-  const [topN, setTopN] = React.useState("10");
+  const [topN, setTopN] = React.useState("8");
 
-  const [chartTypeId, setChartTypeId] = React.useState("columnClustered");
+  const [shape, setShape] = React.useState<Shape>("column");
+  const [stacked, setStacked] = React.useState(false);
   const [title, setTitle] = React.useState("");
-  const [legendPosition, setLegendPosition] = React.useState<LegendPosition>("right");
+  const [titleEdited, setTitleEdited] = React.useState(false);
   const [showDataLabels, setShowDataLabels] = React.useState(false);
+  const [legendPosition, setLegendPosition] = React.useState<LegendPosition>("right");
   const [destination, setDestination] = React.useState<"newSheet" | "sourceSheet">("newSheet");
   const [destinationSheetName, setDestinationSheetName] = React.useState("Chart");
 
-  const chartType = findChartType(chartTypeId);
-
   const sourceRef: DataSourceRef = React.useMemo(() => {
-    if (sourceKey === "selection") {
+    if (sourceKey === SELECTION_KEY) {
       return { kind: "selection", name: "" };
     }
     const separator = sourceKey.indexOf(":");
@@ -88,8 +139,9 @@ const ChartPanel: React.FC = () => {
     void listSourceOptions().then(setSources);
   }, [runner.result]);
 
-  // Re-read headers whenever the chosen source changes, and reset any picks
-  // that no longer exist in it.
+  // Re-read the columns when the source changes - and, for "selected cells",
+  // whenever the user clicks somewhere else in Excel.
+  const selectionDependency = sourceKey === SELECTION_KEY ? selectionVersion : 0;
   React.useEffect(() => {
     let active = true;
     void readSourceHeaders(sourceRef).then((next) => {
@@ -103,14 +155,26 @@ const ChartPanel: React.FC = () => {
         if (kept.length > 0) {
           return kept;
         }
-        // Default to the first column that is not the category column.
         return next.length > 1 ? [next[1]] : [];
       });
     });
     return () => {
       active = false;
     };
-  }, [sourceRef, runner.result]);
+  }, [sourceRef, selectionDependency, runner.result]);
+
+  const singleSeries = ONE_SERIES.has(shape);
+
+  // Offer a sensible title until the user types their own.
+  const suggestedTitle =
+    summarize && valueColumns.length > 0 && groupBy
+      ? `${aggregationLabel(aggregation, valueColumns[0])} by ${groupBy}`
+      : "";
+  React.useEffect(() => {
+    if (!titleEdited) {
+      setTitle(suggestedTitle);
+    }
+  }, [suggestedTitle, titleEdited]);
 
   const summarizeRequest: SummarizeRequest | null = React.useMemo(() => {
     if (!summarize) {
@@ -125,98 +189,89 @@ const ChartPanel: React.FC = () => {
     };
   }, [summarize, headers, groupBy, valueColumns, aggregation, sort, limitCategories, topN]);
 
-  const request: ChartRequest = React.useMemo(
-    () => ({
-      source: sourceRef,
-      summarize: summarizeRequest,
-      chartTypeId,
-      title,
-      legendPosition,
-      showDataLabels,
-      destination,
-      destinationSheetName,
-    }),
-    [
-      sourceRef,
-      summarizeRequest,
-      chartTypeId,
-      title,
-      legendPosition,
-      showDataLabels,
-      destination,
-      destinationSheetName,
-    ]
-  );
+  const request: ChartRequest = {
+    source: sourceRef,
+    summarize: summarizeRequest,
+    chartTypeId: chartTypeIdFor(shape, stacked && STACKABLE.has(shape)),
+    title,
+    legendPosition,
+    showDataLabels,
+    destination,
+    destinationSheetName,
+  };
 
-  // Show the same problems the feature would report, before anything is written.
   const problems = headers.length > 0 ? validateChartRequest(request, headers.length) : [];
-  const ready = headers.length > 0 && problems.length === 0;
+  const hasData = headers.length > 0;
+  const ready = hasData && problems.length === 0;
 
-  const valueColumnOptions = headers.filter((header) => !summarize || header !== groupBy);
+  const valueChoices = headers.filter((header) => !summarize || header !== groupBy);
+
+  const pickShape = (next: Shape) => {
+    setShape(next);
+    // A pie can only show one set of numbers.
+    if (ONE_SERIES.has(next)) {
+      setValueColumns((current) => current.slice(0, 1));
+    }
+  };
+
+  const sourceLabel =
+    sourceKey === SELECTION_KEY
+      ? "The cells I've selected"
+      : (sources.find((item) => `${item.kind}:${item.name}` === sourceKey)?.label ?? "");
 
   return (
     <div>
-      <ResultBanner result={runner.result} />
-
-      <Section
-        title="Data"
-        description="Chart the current selection, or any sheet or table in this workbook. The first row is treated as headers."
-      >
+      <Step number={1} title="Choose your data">
         <Dropdown
-          value={
-            sourceKey === "selection"
-              ? "Current selection"
-              : (sources.find((item) => `${item.kind}:${item.name}` === sourceKey)?.label ?? "")
-          }
+          value={sourceLabel}
           selectedOptions={[sourceKey]}
           onOptionSelect={(_event, data) => setSourceKey(String(data.optionValue))}
         >
-          <Option value="selection">Current selection</Option>
+          <Option value={SELECTION_KEY} text="The cells I've selected">
+            The cells I&apos;ve selected
+          </Option>
           {sources.map((item) => (
             <Option key={`${item.kind}:${item.name}`} value={`${item.kind}:${item.name}`} text={item.label}>
               {item.label}
             </Option>
           ))}
         </Dropdown>
-        <Text className={styles.hint}>
-          {headers.length > 0
-            ? `${headers.length} column(s): ${headers.slice(0, 5).join(", ")}${headers.length > 5 ? "..." : ""}`
-            : "No data found. Select a range with a header row, or pick a sheet."}
-        </Text>
-      </Section>
+        {hasData ? (
+          <div className={styles.row}>
+            <TableSimple20Regular />
+            <Text className={styles.hint}>
+              {headers.length} columns: {headers.slice(0, 4).join(", ")}
+              {headers.length > 4 ? ", ..." : ""}
+            </Text>
+          </div>
+        ) : (
+          <Tip>
+            {sourceKey === SELECTION_KEY
+              ? "Click inside your table in Excel. The first row should be headings."
+              : "That sheet looks empty. It needs a heading row and at least one row of data."}
+          </Tip>
+        )}
+      </Step>
 
-      <Section
-        title="Summarize"
-        description="Group the rows before charting. Leave this on for raw data such as order lines; turn it off if your range is already a small summary table."
+      <Step
+        number={2}
+        title="What should it show?"
+        waitingFor={hasData ? undefined : "Choose some data first."}
       >
-        <Checkbox
-          label="Group and total the data first"
+        <Switch
+          label="Add up my data first"
           checked={summarize}
-          onChange={(_event, data) => setSummarize(Boolean(data.checked))}
+          onChange={(_event, data) => setSummarize(data.checked)}
         />
+        <Text className={styles.hint}>
+          {summarize
+            ? "Best for a long list, like one row per sale. Rows are grouped and totalled before charting."
+            : "Best when your data is already a short table of totals. The first column becomes the labels."}
+        </Text>
 
         {summarize ? (
           <>
-            <Field label="Group by (categories)">
-              <Dropdown
-                value={groupBy}
-                selectedOptions={[groupBy]}
-                disabled={headers.length === 0}
-                onOptionSelect={(_event, data) => {
-                  const next = String(data.optionValue);
-                  setGroupBy(next);
-                  setValueColumns((current) => current.filter((header) => header !== next));
-                }}
-              >
-                {headers.map((header) => (
-                  <Option key={header} value={header}>
-                    {header}
-                  </Option>
-                ))}
-              </Dropdown>
-            </Field>
-
-            <Field label="Calculate">
+            <Field label="Calculate the">
               <Dropdown
                 value={AGGREGATIONS.find((item) => item.value === aggregation)?.label ?? ""}
                 selectedOptions={[aggregation]}
@@ -231,22 +286,19 @@ const ChartPanel: React.FC = () => {
             </Field>
 
             <Field
-              label="Of these columns"
-              hint={chartType?.singleSeriesOnly ? "Pie and doughnut charts show one column." : undefined}
+              label="of"
+              hint={singleSeries ? "A pie chart shows one column." : "You can pick more than one."}
             >
               <Dropdown
-                multiselect={!chartType?.singleSeriesOnly}
+                multiselect={!singleSeries}
                 placeholder="Choose a column"
                 selectedOptions={valueColumns}
                 value={valueColumns.join(", ")}
-                disabled={headers.length === 0}
                 onOptionSelect={(_event, data) =>
-                  setValueColumns(
-                    chartType?.singleSeriesOnly ? [String(data.optionValue)] : data.selectedOptions
-                  )
+                  setValueColumns(singleSeries ? [String(data.optionValue)] : data.selectedOptions)
                 }
               >
-                {valueColumnOptions.map((header) => (
+                {valueChoices.map((header) => (
                   <Option key={header} value={header}>
                     {header}
                   </Option>
@@ -254,117 +306,120 @@ const ChartPanel: React.FC = () => {
               </Dropdown>
             </Field>
 
-            <Field label="Order">
+            <Field label="for each">
               <Dropdown
-                value={SORT_ORDERS.find((item) => item.value === sort)?.label ?? ""}
-                selectedOptions={[sort]}
-                onOptionSelect={(_event, data) => setSort(data.optionValue as SortOrder)}
+                value={groupBy}
+                selectedOptions={[groupBy]}
+                onOptionSelect={(_event, data) => {
+                  const next = String(data.optionValue);
+                  setGroupBy(next);
+                  setValueColumns((current) => current.filter((header) => header !== next));
+                }}
               >
-                {SORT_ORDERS.map((item) => (
-                  <Option key={item.value} value={item.value}>
-                    {item.label}
+                {headers.map((header) => (
+                  <Option key={header} value={header}>
+                    {header}
                   </Option>
                 ))}
               </Dropdown>
             </Field>
 
-            <Checkbox
-              label="Keep only the top categories"
-              checked={limitCategories}
-              onChange={(_event, data) => setLimitCategories(Boolean(data.checked))}
-            />
-            {limitCategories ? (
-              <Field label="How many" hint='Everything else is combined into one "Other" row.'>
-                <Input type="number" min={1} value={topN} onChange={(_event, data) => setTopN(data.value)} />
-              </Field>
-            ) : null}
-
-            <RunButton
-              label="Build summary table only"
-              appearance="secondary"
-              busy={runner.busy}
-              disabled={!ready || !summarizeRequest}
-              onClick={() =>
-                void runner.run(() =>
-                  summarizeToNewSheet(sourceRef, summarizeRequest!, "Summary")
-                )
-              }
-            />
-          </>
-        ) : null}
-      </Section>
-
-      <Section title="Chart">
-        <Field label="Type">
-          <Dropdown
-            value={chartType?.label ?? ""}
-            selectedOptions={[chartTypeId]}
-            onOptionSelect={(_event, data) => {
-              const nextId = String(data.optionValue);
-              setChartTypeId(nextId);
-              // A pie cannot show several series, so drop back to one column.
-              if (findChartType(nextId)?.singleSeriesOnly) {
-                setValueColumns((current) => current.slice(0, 1));
-              }
-            }}
-          >
-            {CHART_GROUPS.map((group) => {
-              const inGroup = CHART_TYPES.filter((type) => type.group === group);
-              return inGroup.length === 0 ? null : (
-                <OptionGroup key={group} label={group}>
-                  {inGroup.map((type) => (
-                    <Option key={type.id} value={type.id} text={type.label}>
-                      {type.label}
+            <MoreOptions>
+              <Field label="Order">
+                <Dropdown
+                  value={SORT_ORDERS.find((item) => item.value === sort)?.label ?? ""}
+                  selectedOptions={[sort]}
+                  onOptionSelect={(_event, data) => setSort(data.optionValue as SortOrder)}
+                >
+                  {SORT_ORDERS.map((item) => (
+                    <Option key={item.value} value={item.value}>
+                      {item.label}
                     </Option>
                   ))}
-                </OptionGroup>
-              );
-            })}
-          </Dropdown>
+                </Dropdown>
+              </Field>
+              <Switch
+                label="Show only the biggest few, and group the rest as Other"
+                checked={limitCategories}
+                onChange={(_event, data) => setLimitCategories(data.checked)}
+              />
+              {limitCategories ? (
+                <Field label="How many to show">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={topN}
+                    onChange={(_event, data) => setTopN(data.value)}
+                  />
+                </Field>
+              ) : null}
+            </MoreOptions>
+          </>
+        ) : null}
+      </Step>
+
+      <Step number={3} title="Pick a chart" waitingFor={hasData ? undefined : "Choose some data first."}>
+        <ChoiceGrid label="Chart type" choices={SHAPES} value={shape} onChange={pickShape} columns={4} />
+        {STACKABLE.has(shape) && valueColumns.length > 1 ? (
+          <Switch
+            label="Stack the columns on top of each other"
+            checked={stacked}
+            onChange={(_event, data) => setStacked(data.checked)}
+          />
+        ) : null}
+      </Step>
+
+      <Step number={4} title="Finish" waitingFor={hasData ? undefined : "Choose some data first."}>
+        <Field label="Chart title">
+          <Input
+            value={title}
+            placeholder="No title"
+            onChange={(_event, data) => {
+              setTitle(data.value);
+              setTitleEdited(true);
+            }}
+          />
         </Field>
 
-        <Field label="Title" hint="Leave blank for no title.">
-          <Input value={title} onChange={(_event, data) => setTitle(data.value)} />
-        </Field>
-
-        <Field label="Legend">
-          <Dropdown
-            value={LEGEND_POSITIONS.find((item) => item.value === legendPosition)?.label ?? ""}
-            selectedOptions={[legendPosition]}
-            onOptionSelect={(_event, data) => setLegendPosition(data.optionValue as LegendPosition)}
-          >
-            {LEGEND_POSITIONS.map((item) => (
-              <Option key={item.value} value={item.value}>
-                {item.label}
-              </Option>
-            ))}
-          </Dropdown>
-        </Field>
-
-        <Checkbox
-          label="Show values on the chart"
+        <Switch
+          label="Show the numbers on the chart"
           checked={showDataLabels}
-          onChange={(_event, data) => setShowDataLabels(Boolean(data.checked))}
+          onChange={(_event, data) => setShowDataLabels(data.checked)}
         />
 
-        <Field label="Put it">
+        <Field label="Put the chart">
           <RadioGroup
             value={destination}
             onChange={(_event, data) => setDestination(data.value as "newSheet" | "sourceSheet")}
           >
             <Radio value="newSheet" label="On a new sheet" />
-            <Radio value="sourceSheet" label="Next to the data" />
+            <Radio value="sourceSheet" label="Next to my data" />
           </RadioGroup>
         </Field>
 
-        {destination === "newSheet" ? (
-          <Field label="New sheet name">
-            <Input
-              value={destinationSheetName}
-              onChange={(_event, data) => setDestinationSheetName(data.value)}
-            />
+        <MoreOptions>
+          {destination === "newSheet" ? (
+            <Field label="New sheet name">
+              <Input
+                value={destinationSheetName}
+                onChange={(_event, data) => setDestinationSheetName(data.value)}
+              />
+            </Field>
+          ) : null}
+          <Field label="Legend">
+            <Dropdown
+              value={LEGEND_POSITIONS.find((item) => item.value === legendPosition)?.label ?? ""}
+              selectedOptions={[legendPosition]}
+              onOptionSelect={(_event, data) => setLegendPosition(data.optionValue as LegendPosition)}
+            >
+              {LEGEND_POSITIONS.map((item) => (
+                <Option key={item.value} value={item.value}>
+                  {item.label}
+                </Option>
+              ))}
+            </Dropdown>
           </Field>
-        ) : null}
+        </MoreOptions>
 
         {problems.length > 0 ? (
           <ul className={styles.detailList}>
@@ -374,19 +429,29 @@ const ChartPanel: React.FC = () => {
           </ul>
         ) : null}
 
-        <RunButton
+        <ActionButton
+          runner={runner}
+          id="chart"
+          wide
           label="Create chart"
-          busy={runner.busy}
+          busyLabel="Creating chart..."
           disabled={!ready}
-          onClick={() => void runner.run(() => createChart(request))}
+          onRun={() => createChart(request)}
         />
-        {summarize ? (
-          <Text className={styles.hint}>
-            The summary table is written to the sheet as well, so the numbers behind the chart stay
-            visible.
-          </Text>
+        {summarize && summarizeRequest ? (
+          <ActionButton
+            runner={runner}
+            id="summary"
+            appearance="secondary"
+            label="Just make the summary table"
+            disabled={!ready}
+            onRun={() => summarizeToNewSheet(sourceRef, summarizeRequest, "Summary")}
+          />
         ) : null}
-      </Section>
+        {summarize ? (
+          <Tip>The totals behind the chart are put on the sheet too, so you can check them.</Tip>
+        ) : null}
+      </Step>
     </div>
   );
 };

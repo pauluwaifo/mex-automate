@@ -129,13 +129,13 @@ src/
   taskpane/
     index.tsx                  React entry point; follows the Office theme
     components/
-      App.tsx                  Tab shell (Clean / Merge / Charts / Formulas / Reports)
+      App.tsx                  Home screen of tools, and the header with a back button
       CleanPanel.tsx           ...one panel per feature
       MergePanel.tsx
       ChartPanel.tsx
       FormulaPanel.tsx
       ReportPanel.tsx
-      ui.tsx                   Section, ResultBanner, useActionRunner, RunButton
+      ui.tsx                   Step, ActionCard, MoreOptions, ActionButton, ChoiceGrid, Tip
       useSelection.ts          Live selection tracking
     features/
       dataCleaning.ts          Pure transforms + Office.js drivers

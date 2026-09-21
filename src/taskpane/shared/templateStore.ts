@@ -60,6 +60,10 @@ export function parseTemplate(raw: unknown): ReportTemplate | null {
     zones: Array.isArray(template.zones) ? template.zones : [],
     mappings: template.mappings && typeof template.mappings === "object" ? template.mappings : {},
     options: { ...DEFAULT_REFRESH_OPTIONS, ...(template.options ?? {}) },
+    sourceSheetName:
+      typeof template.sourceSheetName === "string" && template.sourceSheetName !== ""
+        ? template.sourceSheetName
+        : undefined,
   };
 }
 

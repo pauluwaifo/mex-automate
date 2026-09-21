@@ -28,6 +28,16 @@ function subscribeToSelection(onChange: () => void): () => void {
   };
 }
 
+/**
+ * A counter that ticks every time the user selects different cells. Put it in an
+ * effect's dependencies to re-read anything that depends on the selection.
+ */
+export function useSelectionVersion(): number {
+  const [version, setVersion] = React.useState(0);
+  React.useEffect(() => subscribeToSelection(() => setVersion((current) => current + 1)), []);
+  return version;
+}
+
 /** The address a command with this scope would act on, kept current as the user clicks around. */
 export function useTargetAddress(scope: CleaningScope, refreshToken = 0): string {
   const [address, setAddress] = React.useState("...");

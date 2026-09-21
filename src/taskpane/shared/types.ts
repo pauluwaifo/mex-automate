@@ -82,4 +82,9 @@ export interface ReportTemplate {
   /** Column mappings keyed by zone name. */
   mappings: Record<string, ColumnMapping[]>;
   options: RefreshOptions;
+  /**
+   * Sheet the new data was last taken from, so a saved report can be updated in
+   * one click. Absent in templates saved before this was recorded.
+   */
+  sourceSheetName?: string;
 }
