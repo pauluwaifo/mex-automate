@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MEx Automate</title>
-<meta name="description" content="A free Excel add-in that cleans messy data, combines sheets, builds charts and refreshes reports in a few clicks. Nothing leaves your computer.">
+<meta name="description" content="A free Excel add-in that finds the real table in a messy export, fixes every problem in one click, and turns it into a dashboard of up to eight charts. Nothing leaves your computer.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,500..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
@@ -12,6 +12,7 @@
 body { margin: 0; }
 img { max-width: 100%; }
 [hidden] { display: none !important; }
+
 :root {
   color-scheme: light;
   --ground: #f3f6f5;
@@ -28,7 +29,6 @@ img { max-width: 100%; }
   --accent-ink: #ffffff;
   --accent-soft: #daf0e7;
   --mark: #ffe067;
-  --bad: rgba(214, 69, 50, 0.16);
   --bad-ink: #b3321f;
   --ok: #178a4f;
   --ok-soft: #e1f4e8;
@@ -38,10 +38,16 @@ img { max-width: 100%; }
   --band-invert-ink: #eef4f1;
   --band-invert-muted: #a7b8b2;
   --shadow: 0 1px 2px rgba(18, 32, 28, 0.06), 0 12px 32px -12px rgba(18, 32, 28, 0.18);
+  /* Categorical palette: fixed order, checked for colour-blind separation. */
   --s1: #2a78d6;
   --s2: #eb6834;
   --s3: #1baf7a;
   --s4: #eda100;
+  --s5: #e87ba4;
+  --s6: #008300;
+  --s7: #4a3aa7;
+  --s8: #e34948;
+  --s-other: #9aa3a0;
   --display: "Bricolage Grotesque", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
   --body: "IBM Plex Sans", -apple-system, "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -63,7 +69,6 @@ img { max-width: 100%; }
     --accent-ink: #062219;
     --accent-soft: #163a2f;
     --mark: rgba(232, 197, 71, 0.42);
-    --bad: rgba(230, 103, 103, 0.2);
     --bad-ink: #f08b7d;
     --ok: #4cc987;
     --ok-soft: #173627;
@@ -77,6 +82,11 @@ img { max-width: 100%; }
     --s2: #d95926;
     --s3: #199e70;
     --s4: #c98500;
+    --s5: #d55181;
+    --s6: #008300;
+    --s7: #9085e9;
+    --s8: #e66767;
+    --s-other: #6f7a76;
   }
 }
 :root[data-theme="dark"] {
@@ -95,7 +105,6 @@ img { max-width: 100%; }
   --accent-ink: #062219;
   --accent-soft: #163a2f;
   --mark: rgba(232, 197, 71, 0.42);
-  --bad: rgba(230, 103, 103, 0.2);
   --bad-ink: #f08b7d;
   --ok: #4cc987;
   --ok-soft: #173627;
@@ -109,6 +118,11 @@ img { max-width: 100%; }
   --s2: #d95926;
   --s3: #199e70;
   --s4: #c98500;
+  --s5: #d55181;
+  --s6: #008300;
+  --s7: #9085e9;
+  --s8: #e66767;
+  --s-other: #6f7a76;
 }
 
 * { box-sizing: border-box; }
@@ -123,7 +137,6 @@ body {
 a { color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
-/* Graph paper behind the top of the page, fading out as you scroll down. */
 .paper {
   background-image:
     linear-gradient(var(--paper-line) 1px, transparent 1px),
@@ -133,7 +146,7 @@ a { color: inherit; }
   mask-image: linear-gradient(#000 55%, transparent);
   position: absolute;
   inset: 0 0 auto 0;
-  height: 1100px;
+  height: 1200px;
   pointer-events: none;
   z-index: 0;
 }
@@ -155,12 +168,7 @@ a { color: inherit; }
   backdrop-filter: blur(10px);
   border-bottom: 1px solid color-mix(in srgb, var(--gridline) 70%, transparent);
 }
-.nav .wrap {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  min-height: 62px;
-}
+.nav .wrap { display: flex; align-items: center; gap: 24px; min-height: 62px; }
 .brand {
   display: flex;
   align-items: center;
@@ -172,13 +180,7 @@ a { color: inherit; }
   letter-spacing: -0.01em;
 }
 .brand svg { width: 28px; height: 28px; color: var(--ink); }
-.nav-links {
-  display: flex;
-  gap: 22px;
-  margin-left: auto;
-  font-size: 0.94rem;
-  color: var(--ink-2);
-}
+.nav-links { display: flex; gap: 22px; margin-left: auto; font-size: 0.94rem; color: var(--ink-2); }
 .nav-links a { text-decoration: none; }
 .nav-links a:hover { color: var(--ink); }
 .btn {
@@ -205,9 +207,9 @@ a { color: inherit; }
 
 /* ---------- Hero ---------- */
 .hero {
-  padding-block: clamp(48px, 8vw, 92px) 36px;
+  padding-block: clamp(48px, 8vw, 88px) 34px;
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
   gap: 40px;
   align-items: end;
 }
@@ -221,12 +223,7 @@ a { color: inherit; }
   align-items: center;
   gap: 8px;
 }
-.eyebrow::before {
-  content: "";
-  width: 18px;
-  height: 1px;
-  background: currentColor;
-}
+.eyebrow::before { content: ""; width: 18px; height: 1px; background: currentColor; }
 h1 {
   font-family: var(--display);
   font-variation-settings: "wdth" 90, "opsz" 96;
@@ -237,14 +234,7 @@ h1 {
   margin: 18px 0 0;
   text-wrap: balance;
 }
-/* The headline's selected "cell": a spreadsheet selection with its fill handle. */
-.selbox {
-  position: relative;
-  display: inline-block;
-  padding: 0 0.12em;
-  margin: 0 -0.04em;
-  color: var(--accent);
-}
+.selbox { position: relative; display: inline-block; padding: 0 0.12em; margin: 0 -0.04em; color: var(--accent); }
 .selbox::before {
   content: "";
   position: absolute;
@@ -269,13 +259,7 @@ h1 {
 @keyframes draw-sel { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes pop { from { scale: 0; } to { scale: 1; } }
 @media (prefers-reduced-motion: reduce) { .selbox::before, .selbox::after { animation: none; } }
-
-.lede {
-  font-size: clamp(1.05rem, 1.6vw, 1.2rem);
-  color: var(--ink-2);
-  max-width: 34em;
-  margin: 0 0 22px;
-}
+.lede { font-size: clamp(1.05rem, 1.6vw, 1.2rem); color: var(--ink-2); max-width: 34em; margin: 0 0 22px; }
 .cta-row { display: flex; flex-wrap: wrap; gap: 12px; }
 .facts {
   list-style: none;
@@ -292,12 +276,7 @@ h1 {
 
 /* ---------- Demo theatre ---------- */
 .theatre { padding-block: 8px 16px; }
-.chapters {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 14px;
-}
+.chapters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
 @media (max-width: 640px) { .chapters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .chapter {
   position: relative;
@@ -312,13 +291,7 @@ h1 {
   overflow: hidden;
   transition: border-color 0.15s, color 0.15s;
 }
-.chapter small {
-  display: block;
-  font: 500 0.7rem/1 var(--mono);
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-  margin-bottom: 5px;
-}
+.chapter small { display: block; font: 500 0.7rem/1 var(--mono); letter-spacing: 0.06em; color: var(--ink-3); margin-bottom: 5px; }
 .chapter:hover { border-color: var(--ink-3); color: var(--ink); }
 .chapter[aria-current="true"] { border-color: var(--accent); color: var(--ink); }
 .chapter .bar {
@@ -330,20 +303,8 @@ h1 {
   background: var(--accent);
   transition: width 0.5s cubic-bezier(.3,.7,.2,1);
 }
-.stage-wrap {
-  position: relative;
-  width: 100%;
-  max-width: 100%;
-  overflow: hidden;
-  border-radius: 14px;
-  box-shadow: var(--shadow);
-}
-.caption-bar {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  margin-top: 16px;
-}
+.stage-wrap { position: relative; width: 100%; max-width: 100%; overflow: hidden; border-radius: 14px; box-shadow: var(--shadow); }
+.caption-bar { display: flex; align-items: flex-start; gap: 14px; margin-top: 16px; }
 .play {
   flex: none;
   width: 44px;
@@ -359,28 +320,18 @@ h1 {
 .play:hover { border-color: var(--ink-3); }
 .play svg { width: 18px; height: 18px; }
 .caption { min-height: 3.2em; }
-.caption .step {
-  font: 500 0.74rem/1 var(--mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.caption p {
-  margin: 6px 0 0;
-  font-size: clamp(1rem, 1.7vw, 1.2rem);
-  line-height: 1.45;
-  max-width: 44em;
-}
+.caption .step { font: 500 0.74rem/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.caption p { margin: 6px 0 0; font-size: clamp(1rem, 1.7vw, 1.2rem); line-height: 1.45; max-width: 46em; }
 
-/* ---------- Mock Excel window (fixed 1040×600 design space, scaled to fit) ---------- */
+/* ---------- Mock Excel window: fixed 1200x720 design space, scaled to fit ---------- */
 .stage {
   position: absolute;
   top: 0;
   left: 0;
-  width: 1040px;
-  height: 600px;
+  width: 1200px;
+  height: 720px;
   transform-origin: 0 0;
-  font: 400 12.5px/1.2 var(--body);
+  font: 400 11.5px/1.2 var(--body);
   color: var(--ink);
   user-select: none;
 }
@@ -409,17 +360,9 @@ h1 {
 .x-top b { color: var(--ink); font-weight: 600; }
 .x-top .dots { display: flex; gap: 6px; }
 .x-top .dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-3); }
-.x-ribbon {
-  height: 44px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--gridline);
-}
-.x-rtab { padding: 6px 10px; color: var(--ink-2); font-size: 12.5px; border-radius: 4px; }
-.x-rtab.on { color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
+.x-ribbon { height: 44px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 10px; border-bottom: 1px solid var(--gridline); }
+.x-rtab { padding: 6px 10px; color: var(--ink-2); font-size: 12.5px; }
+.x-rtab.on { color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--accent); }
 .x-ghost { width: 34px; height: 22px; border-radius: 4px; background: var(--surface-2); margin-left: 4px; }
 .x-ghost.w { width: 58px; }
 .x-sep { width: 1px; height: 24px; background: var(--gridline); margin: 0 8px; }
@@ -438,18 +381,11 @@ h1 {
 .x-auto svg { width: 16px; height: 16px; }
 .x-work { flex: 1; display: flex; min-height: 0; }
 .x-sheetcol { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.x-fbar {
-  height: 30px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--gridline);
-  font: 400 12px/1 var(--mono);
-}
-.x-name { width: 70px; padding: 0 10px; border-right: 1px solid var(--gridline); height: 100%; display: flex; align-items: center; color: var(--ink); }
+.x-fbar { height: 30px; flex: none; display: flex; align-items: center; border-bottom: 1px solid var(--gridline); font: 400 12px/1 var(--mono); }
+.x-name { width: 70px; padding: 0 10px; border-right: 1px solid var(--gridline); height: 100%; display: flex; align-items: center; }
 .x-fx { padding: 0 10px; color: var(--ink-3); font-style: italic; border-right: 1px solid var(--gridline); height: 100%; display: flex; align-items: center; }
-.x-fval { padding: 0 10px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.x-grid { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.x-fval { padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.x-grid { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
 .x-colhead { height: 22px; flex: none; display: flex; background: var(--surface-2); border-bottom: 1px solid var(--gridline); }
 .x-colhead span, .x-corner {
   flex: none;
@@ -457,80 +393,53 @@ h1 {
   align-items: center;
   justify-content: center;
   border-right: 1px solid var(--gridline);
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--ink-3);
+  overflow: hidden;
 }
-.x-corner { width: 34px; }
-.x-colhead span.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; box-shadow: inset 0 -2px 0 var(--accent); }
+.x-corner { width: 30px; }
 .x-body { flex: 1; display: flex; min-height: 0; overflow: hidden; }
-.x-gutter { width: 34px; flex: none; background: var(--surface-2); border-right: 1px solid var(--gridline); }
-.x-gutter span {
-  height: 25px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-bottom: 1px solid var(--gridline);
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.x-gutter span.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; box-shadow: inset -2px 0 0 var(--accent); }
+.x-gutter { width: 30px; flex: none; background: var(--surface-2); border-right: 1px solid var(--gridline); }
+.x-gutter span { height: 20px; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid var(--gridline); font-size: 10px; color: var(--ink-3); }
 .x-cellwrap { position: relative; flex: 1; min-width: 0; overflow: hidden; }
-.x-row { display: flex; height: 25px; overflow: hidden; }
+.x-row { display: flex; height: 20px; overflow: hidden; }
 .x-c {
   flex: none;
   display: flex;
   align-items: center;
-  padding: 0 7px;
+  padding: 0 6px;
   border-right: 1px solid var(--gridline);
   border-bottom: 1px solid var(--gridline);
   white-space: nowrap;
   overflow: hidden;
   font-variant-numeric: tabular-nums;
+  position: relative;
 }
 .x-c .v { display: inline-block; }
 .x-c.num { justify-content: flex-end; }
 .x-c.h { font-weight: 600; }
-.x-c.t { overflow: visible; font: 700 16px/1 var(--display); letter-spacing: -0.01em; position: relative; z-index: 1; }
+.x-c.t { overflow: visible; font: 700 13px/1 var(--display); z-index: 1; }
+.x-c.note { overflow: visible; color: var(--ink-2); font-style: italic; z-index: 1; }
+.x-c.ov { overflow: visible; z-index: 1; }
+.x-c.sec { overflow: visible; font-weight: 600; color: var(--ink-2); z-index: 1; }
 .x-c.th { background: var(--accent); color: var(--accent-ink); font-weight: 600; border-right-color: color-mix(in srgb, var(--accent-ink) 25%, transparent); }
 .x-row.band:nth-child(even) .x-c { background: var(--band); }
-.x-c.rh { font-weight: 600; border-bottom: 2px solid var(--accent); }
-.x-c.tot { font-weight: 700; border-top: 2px solid var(--ink); }
-.x-c.fx { position: relative; }
-.x-c.fx::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  border-style: solid;
-  border-width: 0 6px 6px 0;
-  border-color: transparent var(--accent) transparent transparent;
-  opacity: var(--fxo, 0);
-  transition: opacity 0.3s;
-}
-.x-row.dup .x-c { background: var(--bad); color: var(--bad-ink); text-decoration: line-through; }
-.ws { color: var(--bad-ink); opacity: 0.8; display: inline-block; overflow: hidden; width: 0.55em; text-align: center; }
-.chip { display: inline-flex; align-items: center; gap: 5px; }
-.chip i { width: 8px; height: 8px; border-radius: 2px; }
-.x-flash { animation: flash 1.1s ease-out; }
+/* Problem flags, one colour per kind of problem (the pane lists each by name). */
+.x-c.flag { background: color-mix(in srgb, var(--fc) 20%, var(--surface)); box-shadow: inset 2px 0 0 var(--fc); }
+.x-row.flagrow .x-c { background: color-mix(in srgb, var(--fc) 16%, var(--surface)); }
+.x-row.flagrow .x-c:first-child { box-shadow: inset 3px 0 0 var(--fc); }
+.x-flash { animation: flash 1s ease-out; }
 @keyframes flash { 0%, 25% { background: var(--mark); } 100% { background: transparent; } }
-.x-sel {
+.scanbeam {
   position: absolute;
-  border: 2px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  left: 0;
+  right: 0;
+  height: 44px;
+  top: -44px;
+  z-index: 4;
   pointer-events: none;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--accent) 22%, transparent) 80%, var(--accent) 100%);
   opacity: 0;
-  transition: left 0.22s ease, top 0.22s ease, width 0.22s ease, height 0.22s ease, opacity 0.15s;
-  z-index: 3;
-}
-.x-sel::after {
-  content: "";
-  position: absolute;
-  right: -5px;
-  bottom: -5px;
-  width: 8px;
-  height: 8px;
-  background: var(--accent);
-  border: 1.5px solid var(--surface);
 }
 .x-tabs {
   height: 30px;
@@ -543,68 +452,34 @@ h1 {
   border-top: 1px solid var(--gridline);
   overflow: hidden;
 }
-.x-tab {
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  font-size: 12px;
-  color: var(--ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-}
+.x-tab { display: flex; align-items: center; padding: 0 12px; font-size: 11.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; flex: none; }
 .x-tab.on { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: inset 0 -2px 0 var(--accent); }
-.x-tab.new { color: var(--ink); }
-.x-chart {
-  position: absolute;
-  z-index: 2;
-  background: var(--surface);
-  border: 1px solid var(--gridline);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px -10px rgba(0,0,0,0.25);
-  padding: 12px 12px 6px;
-}
-.x-chart h4 { margin: 0 0 2px; font: 600 14px/1.2 var(--body); text-align: center; color: var(--ink); }
-.x-chart svg text { font: 500 11.5px var(--body); fill: var(--ink-2); }
-.x-chart svg text.b { fill: var(--ink); font-weight: 600; }
-.x-key { font-size: 11px; color: var(--ink-3); }
-.cursor {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 22px;
-  height: 22px;
-  z-index: 30;
-  pointer-events: none;
-  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35));
-}
-.ripple {
-  position: absolute;
-  z-index: 29;
-  width: 34px;
-  height: 34px;
-  margin: -17px 0 0 -17px;
-  border-radius: 50%;
-  border: 2px solid var(--accent);
-  pointer-events: none;
-}
-.keycap {
-  position: absolute;
-  z-index: 31;
-  display: flex;
-  gap: 4px;
-  font: 600 12px/1 var(--mono);
-}
+.cursor { position: absolute; top: 0; left: 0; width: 22px; height: 22px; z-index: 30; pointer-events: none; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35)); }
+.ripple { position: absolute; z-index: 29; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; border: 2px solid var(--accent); pointer-events: none; }
+.keycap { position: absolute; z-index: 31; display: flex; gap: 4px; font: 600 12px/1 var(--mono); }
 .keycap span { padding: 6px 8px; border-radius: 5px; background: var(--ink); color: var(--surface); box-shadow: 0 2px 0 var(--ink-3); }
 
+/* Dashboard canvas (a sheet with gridlines hidden) */
+.db { position: absolute; left: 30px; right: 0; top: 22px; bottom: 0; background: var(--surface); overflow: hidden; z-index: 5; }
+.db-in { padding: 12px 14px; }
+.db-title { font: 700 18px/1.1 var(--display); letter-spacing: -0.01em; }
+.db-sub { font-size: 11px; color: var(--ink-3); margin-top: 3px; }
+.db-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+.db-kpi { background: var(--surface-2); border-radius: 6px; padding: 7px 10px; height: 58px; }
+.db-kpi small { display: block; font-size: 10px; color: var(--ink-2); }
+.db-kpi b { display: block; font: 700 18px/1.2 var(--body); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.db-kpi i { display: block; font-style: normal; font-size: 10px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.db-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.db-card { border: 1px solid var(--gridline); border-radius: 6px; padding: 6px 8px 4px; background: var(--surface); }
+.db-card.full { grid-column: 1 / -1; }
+.db-card h5 { margin: 0; font: 600 10.5px/1.3 var(--body); color: var(--ink); }
+.db-card svg { display: block; }
+.db-card text { font: 500 8.5px var(--body); fill: var(--ink-3); }
+.db-card text.lg { fill: var(--ink-2); }
+
 /* ---------- The MEx pane inside the mock ---------- */
-.x-pane {
-  width: 0;
-  flex: none;
-  overflow: hidden;
-  background: var(--surface-2);
-  border-left: 1px solid var(--gridline);
-}
-.p-in { width: 300px; height: 100%; display: flex; flex-direction: column; }
+.x-pane { width: 0; flex: none; overflow: hidden; background: var(--surface-2); border-left: 1px solid var(--gridline); }
+.p-in { width: 320px; height: 100%; display: flex; flex-direction: column; }
 .p-head {
   height: 42px;
   flex: none;
@@ -620,126 +495,49 @@ h1 {
 .p-head svg { width: 18px; height: 18px; color: var(--accent); }
 .p-head .back { color: var(--ink-2); display: flex; }
 .p-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; position: relative; flex: 1; min-height: 0; }
-.p-hello { font: 700 17px/1.2 var(--display); margin: 4px 2px 4px; letter-spacing: -0.01em; }
-.p-tool, .p-card {
-  background: var(--surface);
-  border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
-  border: 1px solid transparent;
-}
-.p-tool { display: flex; align-items: center; gap: 10px; padding: 9px 10px; }
-.p-tool b, .p-card-h b { display: block; font-size: 12.5px; }
-.p-tool small, .p-card-h small { display: block; color: var(--ink-3); font-size: 11px; line-height: 1.3; margin-top: 1px; }
-.p-ic {
-  width: 30px;
-  height: 30px;
-  flex: none;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.p-ic svg { width: 17px; height: 17px; }
-.p-ic.fx { font: italic 600 13px/1 var(--mono); }
+.p-hello { font: 700 16px/1.2 var(--display); margin: 2px 2px 2px; letter-spacing: -0.01em; }
+.p-label { font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin: 4px 2px 0; }
+.p-tool, .p-card { background: var(--surface); border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.08); border: 1px solid transparent; }
+.p-tool { display: flex; align-items: center; gap: 10px; padding: 7px 10px; }
+.p-tool.feat { padding: 11px 10px; border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.p-tool b { display: block; font-size: 12px; }
+.p-tool.feat b { font-size: 13px; }
+.p-tool small { display: block; color: var(--ink-3); font-size: 10.5px; line-height: 1.3; margin-top: 1px; }
+.p-ic { width: 28px; height: 28px; flex: none; border-radius: 6px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.p-tool.feat .p-ic { width: 34px; height: 34px; background: var(--accent); color: var(--accent-ink); }
+.p-ic svg { width: 16px; height: 16px; }
+.p-ic.fx { font: italic 600 12px/1 var(--mono); }
 .p-chev { margin-left: auto; color: var(--ink-3); font-size: 16px; }
-.p-card { padding: 9px 10px; display: flex; flex-direction: column; gap: 8px; }
-.p-card-h { display: flex; align-items: center; gap: 10px; }
-.p-card-b { display: none; flex-direction: column; gap: 8px; }
-.p-card.open .p-card-b { display: flex; }
-.p-card.open .p-chev { transform: rotate(90deg); }
-.p-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 30px;
-  border-radius: 6px;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 600;
-  font-size: 12.5px;
-}
-.p-btn.two { background: var(--surface); color: var(--ink); border: 1px solid var(--gridline); font-weight: 500; }
-.p-btn.busy { opacity: 0.7; }
-.x-press { filter: brightness(0.92); transform: scale(0.98); }
-.p-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.p-selbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.p-selbar svg { width: 16px; height: 16px; flex: none; }
-.p-selbar small { display: block; font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; }
-.p-selbar b { font-size: 12.5px; }
-.p-radio { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); padding: 0 2px; }
-.p-radio span { display: inline-flex; align-items: center; gap: 5px; }
-.p-radio i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--ink-3); }
-.p-radio i.on { border: 4px solid var(--accent); }
-.p-hint { font-size: 11px; color: var(--ink-3); line-height: 1.35; }
-.p-line { display: flex; align-items: center; gap: 7px; font-size: 12px; }
-.p-box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid var(--ink-3); display: grid; place-items: center; flex: none; }
-.p-box.on { background: var(--accent); border-color: var(--accent); }
-.p-box.on::after { content: ""; width: 7px; height: 4px; border: 2px solid var(--accent-ink); border-top: 0; border-right: 0; transform: translateY(-1px) rotate(-45deg); }
-.p-switch { width: 28px; height: 16px; border-radius: 8px; background: var(--surface-3); position: relative; flex: none; transition: background 0.2s; }
-.p-switch::after { content: ""; position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: transform 0.2s; }
-.p-switch.on { background: var(--accent); }
-.p-switch.on::after { transform: translateX(12px); }
+.p-card { padding: 9px 10px; display: flex; flex-direction: column; gap: 7px; }
 .p-step { display: flex; align-items: flex-start; gap: 8px; }
 .p-num { width: 20px; height: 20px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 600; }
 .p-num.done { background: var(--ok); }
 .p-step b { font-size: 12.5px; display: block; padding-top: 2px; }
-.p-cols { display: flex; flex-direction: column; border: 1px solid var(--gridline); border-radius: 6px; padding: 0 8px; }
-.p-colrow { display: flex; align-items: center; gap: 6px; min-height: 26px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--gridline); overflow: hidden; }
-.p-colrow:last-child { border-bottom: 0; }
-.p-colrow em { font-style: normal; font-weight: 400; color: var(--ink-3); font-size: 10.5px; margin-left: auto; }
-.p-okdot, .p-warndot { width: 13px; height: 13px; border-radius: 50%; flex: none; display: grid; place-items: center; color: var(--surface); font-size: 9px; font-weight: 700; }
-.p-okdot { background: var(--ok); }
-.p-okdot::after { content: "✓"; }
-.p-warndot { background: var(--warn); }
-.p-warndot::after { content: "!"; }
-.p-dd {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  height: 26px;
-  padding: 0 8px;
-  border: 1px solid var(--gridline);
-  border-radius: 5px;
-  background: var(--surface);
-  font-size: 11.5px;
-  font-weight: 400;
-  color: var(--ink-2);
-}
+.p-hint { font-size: 10.5px; color: var(--ink-3); line-height: 1.35; }
+.p-dd { display: flex; align-items: center; justify-content: space-between; height: 26px; padding: 0 8px; border: 1px solid var(--gridline); border-radius: 5px; background: var(--surface); font-size: 11.5px; color: var(--ink); }
 .p-dd::after { content: "⌄"; color: var(--ink-3); margin-top: -5px; }
-.p-menu {
-  position: absolute;
-  z-index: 5;
-  min-width: 170px;
-  background: var(--surface);
-  border: 1px solid var(--gridline);
-  border-radius: 6px;
-  box-shadow: 0 10px 24px -8px rgba(0,0,0,0.3);
-  padding: 4px;
-  font-size: 12px;
-}
-.p-menu div { padding: 6px 8px; border-radius: 4px; }
-.p-menu div.hi { background: var(--accent-soft); color: var(--accent); }
-.p-sentence { font-size: 13px; line-height: 2.1; color: var(--ink-2); }
-.p-pill { display: inline-block; padding: 2px 8px; border-radius: 5px; border: 1px solid var(--gridline); background: var(--surface); color: var(--ink); font-weight: 600; line-height: 1.5; }
-.p-shapes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
-.p-shape { height: 44px; border-radius: 6px; border: 1px solid var(--gridline); background: var(--surface); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 10px; color: var(--ink-2); }
-.p-shape svg { width: 17px; height: 17px; }
-.p-shape.on { border: 2px solid var(--accent); background: var(--accent-soft); color: var(--accent); }
-.p-input { height: 28px; border: 1px solid var(--gridline); border-radius: 5px; background: var(--surface); display: flex; align-items: center; padding: 0 8px; font-size: 12px; }
-.p-input .caret { width: 1px; height: 14px; background: var(--ink); margin-left: 1px; animation: blink 1s steps(1) infinite; }
-@keyframes blink { 50% { opacity: 0; } }
-.p-label { font-size: 11px; color: var(--ink-2); font-weight: 600; }
+.p-btn { display: flex; align-items: center; justify-content: center; gap: 6px; height: 32px; border-radius: 6px; background: var(--accent); color: var(--accent-ink); font-weight: 600; font-size: 12.5px; }
+.p-btn.two { background: var(--surface); color: var(--ink); border: 1px solid var(--gridline); font-weight: 500; }
+.p-btn.busy { opacity: 0.7; }
+.x-press { filter: brightness(0.92); transform: scale(0.98); }
+.p-big { display: flex; align-items: baseline; gap: 8px; }
+.p-big b { font: 700 30px/1 var(--display); color: var(--warn); font-variant-numeric: tabular-nums; min-width: 1.6em; }
+.p-big b.ok { color: var(--ok); }
+.p-big span { font-size: 12px; font-weight: 600; }
+.p-find { display: flex; align-items: center; gap: 7px; min-height: 22px; font-size: 11.5px; border-bottom: 1px solid var(--gridline); }
+.p-find:last-child { border-bottom: 0; }
+.p-find .sw { width: 10px; height: 10px; border-radius: 2px; flex: none; background: var(--fc); }
+.p-find .cnt { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; padding: 0 7px; border-radius: 9px; background: var(--surface-3); font-size: 10.5px; }
+.p-find .tick { width: 14px; height: 14px; border-radius: 50%; background: var(--ok); color: var(--surface); display: grid; place-items: center; font-size: 9px; font-weight: 700; flex: none; }
+.p-sug { display: flex; align-items: center; gap: 7px; padding: 2px 6px; font-size: 10.5px !important; border: 1px solid var(--gridline); border-radius: 6px; font-size: 11px; font-weight: 600; background: var(--surface); }
+.p-sug .bx { width: 12px; height: 12px; border-radius: 3px; background: var(--accent); flex: none; position: relative; }
+.p-sug .bx::after { content: ""; position: absolute; left: 3px; top: 2px; width: 5px; height: 3px; border: 1.5px solid var(--accent-ink); border-top: 0; border-right: 0; transform: rotate(-45deg); }
+.p-sug .ki { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
+.p-sug .ki svg { width: 13px; height: 13px; }
+.p-switch { width: 28px; height: 16px; border-radius: 8px; background: var(--accent); position: relative; flex: none; }
+.p-switch::after { content: ""; position: absolute; left: 14px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); }
+.p-line { display: flex; align-items: center; gap: 7px; font-size: 11.5px; }
+.p-tip { font-size: 10.5px; color: var(--ink-2); line-height: 1.35; padding: 7px 9px; border-radius: 6px; background: color-mix(in srgb, var(--s4) 14%, var(--surface)); }
 .x-banner {
   display: flex;
   align-items: flex-start;
@@ -748,92 +546,75 @@ h1 {
   border-radius: 6px;
   background: var(--ok-soft);
   border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
-  font-size: 11.5px;
+  font-size: 11px;
   line-height: 1.35;
 }
 .x-banner b { display: block; font-size: 12px; }
-.x-banner .p-okdot { margin-top: 1px; }
-.p-saved { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
-.p-saved b { font-size: 12.5px; display: block; }
-.p-saved small { font-size: 11px; color: var(--ink-3); }
-.p-edit { margin-left: auto; font-size: 11.5px; color: var(--accent); font-weight: 600; }
+.okdot { width: 14px; height: 14px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--ok); color: var(--surface); font-size: 9px; font-weight: 700; margin-top: 1px; }
 
 /* ---------- Sections ---------- */
 section { scroll-margin-top: 80px; }
 .section { padding-block: 72px; }
-.section-head { max-width: 40em; margin-bottom: 36px; }
+.section-head { max-width: 42em; margin-bottom: 36px; }
 h2 {
   font-family: var(--display);
-  font-variation-settings: "wdth" 86, "opsz" 72;
+  font-variation-settings: "wdth" 88, "opsz" 72;
   font-weight: 720;
   font-size: clamp(1.9rem, 4vw, 3rem);
-  line-height: 1.02;
-  letter-spacing: -0.03em;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
   margin: 12px 0 12px;
   text-wrap: balance;
 }
 .section-head p { color: var(--ink-2); margin: 0; font-size: 1.06rem; }
 
-/* Tool specimens: each row reads like a line in a spreadsheet. */
-.specimens { border-top: 1px solid var(--gridline); }
-.spec {
+.feature {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) minmax(0, 1fr);
-  gap: 28px;
-  align-items: center;
-  padding-block: 26px;
-  border-bottom: 1px solid var(--gridline);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 40px;
+  padding-block: 36px;
+  border-top: 1px solid var(--gridline);
+  align-items: start;
 }
-@media (max-width: 860px) { .spec { grid-template-columns: 1fr; gap: 12px; } }
-.spec-name { display: flex; align-items: center; gap: 14px; }
-.spec-name h3 { margin: 0; font: 650 1.25rem/1.15 var(--display); letter-spacing: -0.015em; }
-.spec-ic {
-  width: 44px;
-  height: 44px;
-  flex: none;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.spec-ic svg { width: 22px; height: 22px; }
-.spec-ic.fx { font: italic 600 1.05rem/1 var(--mono); }
-.spec p { margin: 0; color: var(--ink-2); }
-.cells {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font: 400 0.84rem/1.3 var(--mono);
-  flex-wrap: wrap;
-}
+@media (max-width: 860px) { .feature { grid-template-columns: 1fr; gap: 20px; } }
+.feature-name { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.feature-name h3 { margin: 0; font: 680 1.6rem/1.1 var(--display); letter-spacing: -0.02em; }
+.spec-ic { width: 48px; height: 48px; flex: none; border-radius: 12px; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); }
+.spec-ic svg { width: 24px; height: 24px; }
+.feature p { margin: 0 0 16px; color: var(--ink-2); }
+.catch { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; font-size: 0.94rem; }
+@media (max-width: 520px) { .catch { grid-template-columns: 1fr; } }
+.catch li { display: flex; gap: 8px; align-items: flex-start; }
+.catch li::before { content: ""; flex: none; width: 8px; height: 8px; margin-top: 8px; border-radius: 2px; background: var(--accent); }
+.catch code { font: 400 0.86em/1 var(--mono); padding: 1px 4px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--gridline); }
+
+.cells { display: flex; align-items: center; gap: 12px; font: 400 0.84rem/1.3 var(--mono); flex-wrap: wrap; }
 .cellset { display: flex; flex-direction: column; border: 1px solid var(--gridline); border-radius: 6px; overflow: hidden; background: var(--surface); }
 .cellset span { padding: 5px 10px; border-bottom: 1px solid var(--gridline); white-space: pre; }
 .cellset span:last-child { border-bottom: 0; }
 .cellset.before span { color: var(--ink-2); }
 .cellset.after { border-color: var(--accent); }
-.cellset.after span { color: var(--ink); }
-.cells .arrow { color: var(--accent); font-family: var(--body); font-size: 1.1rem; }
-.cells .sp { background: var(--bad); color: var(--bad-ink); border-radius: 2px; }
+.cellset .gone { text-decoration: line-through; color: var(--bad-ink); }
+.cellset .r { text-align: right; }
+.cells .arrow { color: var(--accent); font-family: var(--body); font-size: 1.2rem; }
 
-/* Install steps: a real sequence, so they are numbered. */
-.install {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  counter-reset: step;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
+.mini-dash { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 12px; border: 1px solid var(--gridline); border-radius: 10px; background: var(--surface); }
+.mini-dash .k { grid-column: span 1; height: 34px; border-radius: 5px; background: var(--surface-2); }
+.mini-dash .c { height: 70px; border-radius: 5px; border: 1px solid var(--gridline); display: grid; place-items: center; color: var(--accent); }
+.mini-dash .c.w { grid-column: span 4; }
+.mini-dash .c.h { grid-column: span 2; }
+.mini-dash .c svg { width: 60%; height: 60%; }
+.mini-note { font-size: 0.86rem; color: var(--ink-3); margin-top: 8px; }
+
+.also-head { margin: 56px 0 18px; font: 650 1.2rem/1.2 var(--display); }
+.also { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.also div { background: var(--surface); border: 1px solid var(--gridline); border-radius: 10px; padding: 16px; }
+.also h4 { margin: 0 0 4px; font: 650 1rem/1.3 var(--body); }
+.also p { margin: 0; font-size: 0.9rem; color: var(--ink-2); }
+
+.install { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; counter-reset: step; list-style: none; padding: 0; margin: 0; }
 @media (max-width: 820px) { .install { grid-template-columns: 1fr; } }
-.install li {
-  counter-increment: step;
-  background: var(--surface);
-  border: 1px solid var(--gridline);
-  border-radius: 12px;
-  padding: 22px;
-}
+.install li { counter-increment: step; background: var(--surface); border: 1px solid var(--gridline); border-radius: 12px; padding: 22px; }
 .install li::before {
   content: counter(step);
   display: grid;
@@ -850,7 +631,6 @@ h2 {
 .install p { margin: 0; color: var(--ink-2); font-size: 0.96rem; }
 .kbd { font: 500 0.86em/1 var(--mono); padding: 2px 6px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--gridline); white-space: nowrap; }
 
-/* Privacy band, inverted. */
 .privacy {
   background: var(--band-invert);
   color: var(--band-invert-ink);
@@ -870,47 +650,17 @@ h2 {
 .promises p { margin: 0; color: var(--band-invert-muted); font-size: 0.95rem; }
 .promises div { border-top: 1px solid color-mix(in srgb, var(--band-invert-muted) 35%, transparent); padding-top: 14px; }
 
-/* FAQ */
 .faq { max-width: 820px; }
 .faq details { border-bottom: 1px solid var(--gridline); }
-.faq summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 18px 36px 18px 0;
-  position: relative;
-  font: 600 1.06rem/1.35 var(--body);
-}
+.faq summary { list-style: none; cursor: pointer; padding: 18px 36px 18px 0; position: relative; font: 600 1.06rem/1.35 var(--body); }
 .faq summary::-webkit-details-marker { display: none; }
-.faq summary::after {
-  content: "+";
-  position: absolute;
-  right: 4px;
-  top: 14px;
-  font: 400 1.5rem/1 var(--body);
-  color: var(--accent);
-  transition: transform 0.2s;
-}
+.faq summary::after { content: "+"; position: absolute; right: 4px; top: 14px; font: 400 1.5rem/1 var(--body); color: var(--accent); transition: transform 0.2s; }
 .faq details[open] summary::after { transform: rotate(45deg); }
 .faq details p { margin: 0 0 20px; color: var(--ink-2); max-width: 62ch; }
 
-/* Closing call to action */
-.closing {
-  text-align: left;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  padding-block: 64px 80px;
-  border-top: 1px solid var(--gridline);
-}
+.closing { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 24px; padding-block: 64px 80px; border-top: 1px solid var(--gridline); }
 .closing h2 { margin: 0; max-width: 14em; }
-footer {
-  border-top: 1px solid var(--gridline);
-  padding-block: 28px 40px;
-  font-size: 0.86rem;
-  color: var(--ink-3);
-}
+footer { border-top: 1px solid var(--gridline); padding-block: 28px 40px; font-size: 0.86rem; color: var(--ink-3); }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; }
 footer .brand { font-size: 1rem; color: var(--ink); }
 footer p { margin: 0; max-width: 60ch; }
@@ -944,7 +694,7 @@ footer p { margin: 0; max-width: 60ch; }
         <h1>Stop fixing spreadsheets <span class="selbox">by hand.</span></h1>
       </div>
       <div>
-        <p class="lede">MEx Automate cleans messy exports, combines sheets, builds charts and refreshes your reports, right inside Excel. A few clicks instead of an afternoon.</p>
+        <p class="lede">MEx Automate finds the real table in the messiest export, fixes every problem in one click, and turns it into a dashboard of up to eight charts. Right inside Excel.</p>
         <div class="cta-row">
           <a class="btn btn-primary" href="#install" data-get>Get it free</a>
           <a class="btn btn-ghost" href="#demo">See how it works</a>
@@ -962,7 +712,7 @@ footer p { margin: 0; max-width: 60ch; }
       <div class="stage-wrap" id="stageWrap">
         <div class="stage" id="stage" aria-hidden="true">
           <div class="x-win">
-            <div class="x-top"><span class="dots"><i></i><i></i><i></i></span><b>Orders.xlsx</b><span>Saved to this PC</span></div>
+            <div class="x-top"><span class="dots"><i></i><i></i><i></i></span><b>Sales Extract Jan-Jun.xlsx</b><span>Saved to this PC</span></div>
             <div class="x-ribbon">
               <span class="x-rtab">File</span><span class="x-rtab on">Home</span><span class="x-rtab">Insert</span><span class="x-rtab">Data</span><span class="x-rtab">Review</span>
               <span class="x-sep"></span><span class="x-ghost"></span><span class="x-ghost"></span><span class="x-ghost w"></span><span class="x-sep"></span><span class="x-ghost"></span><span class="x-ghost w"></span>
@@ -971,15 +721,13 @@ footer p { margin: 0; max-width: 60ch; }
             <div class="x-work">
               <div class="x-sheetcol">
                 <div class="x-fbar"><span class="x-name" id="nameBox">A1</span><span class="x-fx">fx</span><span class="x-fval" id="fxVal"></span></div>
-                <div class="x-grid">
+                <div class="x-grid" id="grid">
                   <div class="x-colhead" id="colHead"></div>
                   <div class="x-body">
                     <div class="x-gutter" id="gutter"></div>
-                    <div class="x-cellwrap" id="cellWrap">
-                      <div id="cells"></div>
-                      <div class="x-sel" id="sel"></div>
-                    </div>
+                    <div class="x-cellwrap" id="cellWrap"><div id="cells"></div><div class="scanbeam" id="beam"></div></div>
                   </div>
+                  <div class="db" id="db" hidden><div class="db-in" id="dbIn"></div></div>
                 </div>
                 <div class="x-tabs" id="tabs"></div>
               </div>
@@ -993,7 +741,7 @@ footer p { margin: 0; max-width: 60ch; }
         <button class="play" id="playBtn" type="button" aria-label="Pause the walkthrough"></button>
         <div class="caption">
           <span class="step" id="stepLabel">Step 1</span>
-          <p id="captionText">A typical export: stray spaces, a repeated order, shouting capitals, and dates typed four different ways.</p>
+          <p id="captionText">A real export: title rows, group headings, subtotals, a repeated heading, numbers typed five ways, dates in six formats, and typos.</p>
         </div>
       </div>
     </section>
@@ -1002,56 +750,61 @@ footer p { margin: 0; max-width: 60ch; }
   <section class="section" id="tools" aria-labelledby="tools-title">
     <div class="wrap">
       <div class="section-head">
-        <span class="eyebrow">Five tools</span>
-        <h2 id="tools-title">Each one a job you already do by hand.</h2>
-        <p>Open the add-in, pick what you need, and follow the steps. Every tool shows exactly which cells it's about to change before it changes them.</p>
+        <span class="eyebrow">What it does</span>
+        <h2 id="tools-title">Two big jobs, done for you.</h2>
+        <p>Point it at the sheet. It works out where the table is, what's wrong with it, and what's worth charting, then shows you before it changes anything.</p>
       </div>
-      <div class="specimens">
-        <article class="spec">
-          <div class="spec-name"><span class="spec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l2.2 5.6 5.8 2.2-5.8 2.2L12 18.1l-2.2-5.6-5.8-2.2 5.8-2.2z"/><path d="M19 16l.9 2.1 2.1.9-2.1.9L19 22l-.9-2.1-2.1-.9 2.1-.9z"/></svg></span><h3>Clean up data</h3></div>
-          <p>Remove duplicate rows and invisible spaces, fix capital letters, and turn dates typed as text into real dates, all in one format. Formulas are never touched.</p>
-          <div class="cells" aria-label="Before and after example">
-            <div class="cellset before"><span><span class="sp">··</span>ACME LTD<span class="sp">·</span></span><span>06/01/2024</span></div>
-            <span class="arrow" aria-hidden="true">→</span>
-            <div class="cellset after"><span>Acme Ltd</span><span>2024-01-06</span></div>
+
+      <article class="feature">
+        <div>
+          <div class="feature-name"><span class="spec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/><path d="M17 2.5l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z" fill="currentColor"/></svg></span><h3>Fix messy data</h3></div>
+          <p>One click repairs the whole export and puts a clean, properly typed Excel table on a new sheet. Every problem is listed in plain words with a count and examples first, and you can switch off any fix you don't want. The original is never touched.</p>
+          <ul class="catch">
+            <li>Title, "Generated by" and note rows</li>
+            <li>Headings split over two rows</li>
+            <li>Subtotal and grand total rows</li>
+            <li>Group headings like <code>Region: Europe</code></li>
+            <li>Headings repeated mid-table</li>
+            <li>Numbers typed as text: <code>$1,204.50</code> <code>1.130,00 €</code> <code>(250)</code> <code>980-</code> <code>1,2O0</code></li>
+            <li>Dates in any format, day- or month-first</li>
+            <li>The same name spelled three ways</li>
+            <li><code>N/A</code> and <code>-</code> placeholders</li>
+            <li>Duplicate and blank rows</li>
+          </ul>
+        </div>
+        <div class="cells" aria-label="Before and after example">
+          <div class="cellset before"><span>"  acme ltd "</span><span>Jan 9, 2024</span><span class="r">(65.60)</span><span class="r">78.4O</span><span class="gone">Europe Total   1,402.00</span></div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="cellset after"><span>Acme Ltd</span><span>2024-01-09</span><span class="r">-$65.60</span><span class="r">$78.40</span><span class="r">removed</span></div>
+        </div>
+      </article>
+
+      <article class="feature">
+        <div>
+          <div class="feature-name"><span class="spec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M12 9v12M3 15h9"/></svg></span><h3>Build a dashboard</h3></div>
+          <p>MEx reads what each column holds and suggests up to eight charts that together tell the story: the trend over time, a comparison, a share, a two-way breakdown, a top 10, a relationship. Keep them all or untick a few, and it lays them out with headline numbers across the top.</p>
+          <p>It works straight from a messy export and never adds up prices or percentages. Colours stay the same for the same thing in every chart. The dashboard is saved in the workbook: next month, paste in the new rows and click <strong>Refresh</strong>.</p>
+        </div>
+        <div>
+          <div class="mini-dash" aria-hidden="true">
+            <span class="k"></span><span class="k"></span><span class="k"></span><span class="k"></span>
+            <span class="c w"><svg viewBox="0 0 60 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M2 16l10-5 10 2 10-7 10 3 16-7"/></svg></span>
+            <span class="c h"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="10" width="4" height="11" rx="1"/><rect x="10" y="4" width="4" height="17" rx="1"/><rect x="17" y="13" width="4" height="8" rx="1"/></svg></span>
+            <span class="c h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><circle cx="12" cy="12" r="7"/></svg></span>
+            <span class="c h"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="8" width="4" height="13"/><rect x="10" y="4" width="4" height="17"/><rect x="17" y="11" width="4" height="10"/><rect x="3" y="14" width="4" height="7" opacity=".5"/><rect x="10" y="12" width="4" height="9" opacity=".5"/><rect x="17" y="16" width="4" height="5" opacity=".5"/></svg></span>
+            <span class="c h"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="16" height="3" rx="1"/><rect x="3" y="10" width="12" height="3" rx="1"/><rect x="3" y="16" width="8" height="3" rx="1"/></svg></span>
           </div>
-        </article>
-        <article class="spec">
-          <div class="spec-name"><span class="spec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="18" height="5" rx="1.2"/><rect x="3" y="10" width="18" height="5" rx="1.2"/><path d="M12 17.5v4m-2.5-2.5L12 21.5l2.5-2.5"/></svg></span><h3>Combine sheets</h3></div>
-          <p>Stack several sheets, or Excel and CSV files, into one tidy table on a new sheet. Columns line up by name even when they're spelled differently, and anything that doesn't match gets a simple "Same as…" choice.</p>
-          <div class="cells" aria-label="Before and after example">
-            <div class="cellset before"><span>order_id  AMOUNT</span><span>Order ID  Amount</span></div>
-            <span class="arrow" aria-hidden="true">→</span>
-            <div class="cellset after"><span>Order ID  Amount</span></div>
-          </div>
-        </article>
-        <article class="spec">
-          <div class="spec-name"><span class="spec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M11 3.5a8.5 8.5 0 1 0 8.5 8.5H11z"/><path d="M13.5 1.8a8.5 8.5 0 0 1 8.2 8.2h-8.2z"/></svg></span><h3>Make a chart</h3></div>
-          <p>Say it in plain words: the Sum of Amount for each Region. Pick from seven chart styles, keep only the biggest few with the rest grouped as Other, and get the totals table alongside so every number can be checked.</p>
-          <div class="cells" aria-label="Before and after example">
-            <div class="cellset before"><span>16 order rows</span></div>
-            <span class="arrow" aria-hidden="true">→</span>
-            <div class="cellset after"><span>4 regions + 1 chart</span></div>
-          </div>
-        </article>
-        <article class="spec">
-          <div class="spec-name"><span class="spec-ic fx" aria-hidden="true">fx</span><h3>Formulas</h3></div>
-          <p>Copy a formula down any range and preview the last cell before you commit. Or insert one of 13 ready-made patterns: running totals, % of total, lookups, ranks and more.</p>
-          <div class="cells" aria-label="Before and after example">
-            <div class="cellset before"><span>=E2*2</span></div>
-            <span class="arrow" aria-hidden="true">→</span>
-            <div class="cellset after"><span>=E2*2</span><span>…</span><span>=E17*2</span></div>
-          </div>
-        </article>
-        <article class="spec">
-          <div class="spec-name"><span class="spec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 8.5A8 8 0 0 0 5.2 6.2M4.5 15.5a8 8 0 0 0 14.3 2.3"/><path d="M4.5 2.8v4.4h4.4M19.5 21.2v-4.4h-4.4"/></svg></span><h3>Update a report</h3></div>
-          <p>Pour this month's rows into a finished report. Titles, totals and formula columns stay exactly where they are, and a saved report updates again next month in one click.</p>
-          <div class="cells" aria-label="Before and after example">
-            <div class="cellset before"><span>3 rows · Total 3,710</span></div>
-            <span class="arrow" aria-hidden="true">→</span>
-            <div class="cellset after"><span>4 rows · Total 5,930</span></div>
-          </div>
-        </article>
+          <p class="mini-note">Up to 8 charts, 4 headline numbers, one tidy grid. The numbers behind every chart go on a companion sheet so you can check them.</p>
+        </div>
+      </article>
+
+      <h3 class="also-head">Also in the box</h3>
+      <div class="also">
+        <div><h4>Quick clean-ups</h4><p>One fix at a time: duplicates, spaces, dates, capital letters.</p></div>
+        <div><h4>Combine sheets</h4><p>Stack sheets or CSV and Excel files into one table, columns lined up by name.</p></div>
+        <div><h4>Make a chart</h4><p>A single chart or summary table, in plain words: the Sum of Amount for each Region.</p></div>
+        <div><h4>Formulas</h4><p>Copy a formula down any range with a preview, or pick from 13 ready-made ones.</p></div>
+        <div><h4>Update a report</h4><p>Pour new rows into a finished report; titles, totals and formulas stay put.</p></div>
       </div>
     </div>
   </section>
@@ -1073,7 +826,7 @@ footer p { margin: 0; max-width: 60ch; }
         </li>
         <li>
           <h3>Click Automate</h3>
-          <p>A new <span class="kbd">Automate</span> button appears on the Home tab. Click it, pick a tool, and follow the steps.</p>
+          <p>A new <span class="kbd">Automate</span> button appears on the Home tab. Open your messy sheet, click it, and pick <strong>Fix messy data</strong> or <strong>Build a dashboard</strong>.</p>
         </li>
       </ol>
     </div>
@@ -1090,7 +843,7 @@ footer p { margin: 0; max-width: 60ch; }
         <div class="promises">
           <div><h3>Nothing is uploaded</h3><p>Even the files you combine are read on your computer, inside Excel.</p></div>
           <div><h3>No account</h3><p>No sign-up, no sign-in, no email address.</p></div>
-          <div><h3>Settings live in the file</h3><p>Saved reports are stored inside the .xlsx itself, so they travel with it to a colleague.</p></div>
+          <div><h3>Originals untouched</h3><p>Fixes and dashboards go on new sheets. Your export stays exactly as it arrived.</p></div>
           <div><h3>Free</h3><p>Every tool, with no trial period and no paid tier.</p></div>
         </div>
       </div>
@@ -1105,24 +858,28 @@ footer p { margin: 0; max-width: 60ch; }
       </div>
       <div class="faq">
         <details>
+          <summary>How messy can the data be?</summary>
+          <p>Very. MEx finds the real headings even below a title and a "Generated by" line, removes subtotal, grand total, blank and repeated heading rows, turns group headings into a column, and reads numbers and dates however they were typed, including European decimals, brackets for negatives, and SAP-style trailing minus signs. You see everything it found, with examples, before anything changes.</p>
+        </details>
+        <details>
+          <summary>Will it change my original data?</summary>
+          <p>No. Fix messy data and Build a dashboard put their results on new sheets and leave your export exactly as it was. The smaller tools that do edit in place, like Quick clean-ups, show exactly which cells they're about to change first.</p>
+        </details>
+        <details>
+          <summary>How does Refresh work?</summary>
+          <p>A dashboard is saved inside the workbook along with the sheet it was built from. When next month's rows arrive, paste them into that sheet and click Refresh: every chart and headline number is rebuilt from the new data in the same layout. Charts find their columns by name, so it still works if the columns come in a different order.</p>
+        </details>
+        <details>
           <summary>Which versions of Excel does it work with?</summary>
           <p>Excel 2019 or later on Windows and Mac, Excel in Microsoft 365, and Excel on the web.</p>
         </details>
         <details>
-          <summary>Will it change my original data?</summary>
-          <p>Only where you ask it to. Clean up data changes the cells shown in its "Working on" bar. Combine sheets and charts put their results on new sheets and leave the originals alone. Update a report replaces only the data rows you marked, and keeps titles, totals and formula columns.</p>
-        </details>
-        <details>
           <summary>Can I undo a change?</summary>
-          <p>Excel's Undo may not reverse every change an add-in makes, so for a workbook that matters, save a copy before a big clean-up. Combining and charting never touch your original sheets.</p>
+          <p>Excel's Undo may not reverse every change an add-in makes, so for a workbook that matters, save a copy before a big edit. The two main tools never edit your original sheet, so there's nothing to undo there.</p>
         </details>
         <details>
-          <summary>Does it need macros or VBA?</summary>
-          <p>No. It's built on Microsoft's modern add-in platform, so there are no macros to enable and no security warnings to click through.</p>
-        </details>
-        <details>
-          <summary>Does it need the internet?</summary>
-          <p>Excel loads the add-in itself from the web when you open it, the same as any Office add-in. Your spreadsheet data is never sent anywhere.</p>
+          <summary>Does it need macros or the internet?</summary>
+          <p>No macros: it's built on Microsoft's modern add-in platform. Excel loads the add-in itself from the web when you open it, like any Office add-in, but your spreadsheet data is never sent anywhere.</p>
         </details>
         <details>
           <summary>Is it really free?</summary>
@@ -1134,7 +891,7 @@ footer p { margin: 0; max-width: 60ch; }
 
   <div class="wrap">
     <section class="closing" aria-label="Get MEx Automate">
-      <h2>Your next messy export is a few clicks from tidy.</h2>
+      <h2>Your next messy export is one click from a dashboard.</h2>
       <a class="btn btn-primary" href="#install" data-get>Get MEx Automate free</a>
     </section>
   </div>
@@ -1158,9 +915,8 @@ footer p { margin: 0; max-width: 60ch; }
   const $ = (s, r = document) => r.querySelector(s);
   const stage = $("#stage");
   const wrap = $("#stageWrap");
-  const W = 1040, H = 600;
+  const W = 1200, H = 720;
   let scale = 1;
-
   function fit() {
     scale = wrap.clientWidth / W;
     stage.style.transform = "scale(" + scale + ")";
@@ -1171,7 +927,7 @@ footer p { margin: 0; max-width: 60ch; }
   else window.addEventListener("resize", fit);
 
   // ---------------------------------------------------------------------------
-  // A pausable clock. Every wait and animation checks the run id, so switching
+  // A pausable clock: every wait and animation checks the run id, so switching
   // chapter cancels the running scene cleanly.
   // ---------------------------------------------------------------------------
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1182,7 +938,6 @@ footer p { margin: 0; max-width: 60ch; }
   let speed = 1;
 
   function check(id) { if (id !== runId) throw CANCEL; }
-
   function wait(ms) {
     const id = runId;
     let left = ms * speed;
@@ -1197,10 +952,10 @@ footer p { margin: 0; max-width: 60ch; }
       requestAnimationFrame(tick);
     });
   }
-
-  function tween(ms, fn) {
+  function tween(ms, fn, ease) {
     const id = runId;
     const total = Math.max(1, ms * speed);
+    const curve = ease || ((p) => 1 - Math.pow(1 - p, 3));
     return new Promise((resolve, reject) => {
       let t = 0, last = performance.now();
       function tick(now) {
@@ -1208,13 +963,12 @@ footer p { margin: 0; max-width: 60ch; }
         if (playing) t += now - last;
         last = now;
         const p = Math.min(1, t / total);
-        fn(1 - Math.pow(1 - p, 3));
+        fn(curve(p));
         if (p >= 1) resolve(); else requestAnimationFrame(tick);
       }
       requestAnimationFrame(tick);
     });
   }
-
   function A(el, frames, o) {
     o = o || {};
     const id = runId;
@@ -1230,123 +984,137 @@ footer p { margin: 0; max-width: 60ch; }
       () => {}
     ).then(() => check(id));
   }
-
-  function stageAnimations() {
-    return stage.getAnimations ? stage.getAnimations({ subtree: true }) : [];
-  }
+  const soft = (p) => p.catch(() => {});
+  function stageAnimations() { return stage.getAnimations ? stage.getAnimations({ subtree: true }) : []; }
 
   // ---------------------------------------------------------------------------
   // Icons
   // ---------------------------------------------------------------------------
   const IC = {
+    fix: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>',
+    dash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M12 9v12M3 15h9"/></svg>',
     clean: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2.5l2.2 5.6 5.8 2.2-5.8 2.2L12 18.1l-2.2-5.6-5.8-2.2 5.8-2.2z"/></svg>',
-    stack: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="3" width="18" height="5" rx="1.2"/><rect x="3" y="10" width="18" height="5" rx="1.2"/><path d="M12 17.5v4m-2.5-2.5L12 21.5l2.5-2.5"/></svg>',
+    stack: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="3" width="18" height="5" rx="1.2"/><rect x="3" y="10" width="18" height="5" rx="1.2"/></svg>',
     pie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M11 3.5a8.5 8.5 0 1 0 8.5 8.5H11z"/><path d="M13.5 1.8a8.5 8.5 0 0 1 8.2 8.2h-8.2z"/></svg>',
     sync: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 8.5A8 8 0 0 0 5.2 6.2M4.5 15.5a8 8 0 0 0 14.3 2.3"/><path d="M4.5 2.8v4.4h4.4M19.5 21.2v-4.4h-4.4"/></svg>',
-    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/></svg>',
-    eraser: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M16 4l5 5-10 10H6l-3-3z"/><path d="M9 11l5 5M11 19h10"/></svg>',
-    cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
-    case: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M3 18L8 6l5 12M4.8 14h6.4M15 12.5a3 3 0 1 1 0 5.5M18 11v7"/></svg>',
-    table: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>',
     logo: '<svg viewBox="0 0 24 24"><rect x="2.5" y="2.5" width="19" height="19" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="9" y="9" width="6" height="6" fill="currentColor"/></svg>',
+    line: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M3 17l5-6 4 3 8-9"/></svg>',
+    col: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M5 20v-8M12 20V5M19 20v-5"/></svg>',
+    bar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M4 5h12M4 12h16M4 19h8"/></svg>',
+    donut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></svg>',
+    stackc: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="9" width="4" height="12"/><rect x="10" y="4" width="4" height="17"/><rect x="16" y="12" width="4" height="9"/></svg>',
+    dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="16" r="2"/><circle cx="10" cy="10" r="2"/><circle cx="15" cy="13" r="2"/><circle cx="19" cy="6" r="2"/></svg>',
     play: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M6 3.8v12.4a.8.8 0 0 0 1.2.7l10-6.2a.8.8 0 0 0 0-1.4l-10-6.2A.8.8 0 0 0 6 3.8z"/></svg>',
     pause: '<svg viewBox="0 0 20 20" fill="currentColor"><rect x="4.5" y="3.5" width="4" height="13" rx="1"/><rect x="11.5" y="3.5" width="4" height="13" rx="1"/></svg>',
   };
-  const SHAPES = [
-    ["column", "Column", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 20v-8M10 20V5M15 20v-5M20 20V9"/></svg>'],
-    ["bar", "Bar", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 5h9M4 10h15M4 15h6M4 20h12"/></svg>'],
-    ["line", "Line", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 8-9"/></svg>'],
-    ["pie", "Pie", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M11 3.5a8.5 8.5 0 1 0 8.5 8.5H11z"/><path d="M13.5 1.8a8.5 8.5 0 0 1 8.2 8.2h-8.2z"/></svg>'],
-    ["doughnut", "Doughnut", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></svg>'],
-    ["area", "Area", '<svg viewBox="0 0 24 24" fill="currentColor" opacity=".85"><path d="M3 20v-6l5-5 4 3 8-7v15z"/></svg>'],
-    ["scatter", "Scatter", '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="16" r="2"/><circle cx="10" cy="10" r="2"/><circle cx="15" cy="13" r="2"/><circle cx="19" cy="6" r="2"/></svg>'],
-  ];
-  const TOOLS = [
-    ["clean", "Clean up data", "Duplicates, spaces, dates, capitals.", IC.clean],
-    ["combine", "Combine sheets", "Stack sheets or files into one table.", IC.stack],
-    ["chart", "Make a chart", "A chart or summary from your data.", IC.pie],
-    ["formulas", "Formulas", "Copy one down, or insert a ready-made one.", "fx"],
-    ["report", "Update a report", "New data in, layout untouched.", IC.sync],
-  ];
 
   // ---------------------------------------------------------------------------
-  // Sample data: the same orders as the add-in's own test workbook.
+  // The export. Each row has a kind; each problem cell a flag type.
   // ---------------------------------------------------------------------------
-  const JAN_HEAD = ["Order ID", "Order Date", "Customer", "Region", "Amount", "Units"];
-  const JAN_W = [64, 100, 138, 72, 76, 54];
-  const JAN_RAW = [
-    [1, "2024-01-05", "  Acme Ltd ", "North", 1200, 3],
-    [2, "06/01/2024", "beta trading", "South", 850, 2],
-    [3, "Jan 7, 2024", "ACME LTD", "north", 400, 1],
-    [4, "2024-01-08", "Gamma Co", "East", 2200, 5],
-    [5, "09/01/2024", "beta trading  ", "South", 975, 2],
-    [4, "2024-01-08", "Gamma Co", "East", 2200, 5],
-    [6, "10-Jan-2024", "Delta Supplies", "West", 310, 1],
-    [7, "2024-01-11", "Acme Ltd", "North", 1450, 4],
-  ];
-  const JAN_CLEAN = [
-    [1, "2024-01-05", "Acme Ltd", "North", 1200, 3],
-    [2, "2024-01-06", "Beta Trading", "South", 850, 2],
-    [3, "2024-01-07", "Acme Ltd", "North", 400, 1],
-    [4, "2024-01-08", "Gamma Co", "East", 2200, 5],
-    [5, "2024-01-09", "Beta Trading", "South", 975, 2],
-    [6, "2024-01-10", "Delta Supplies", "West", 310, 1],
-    [7, "2024-01-11", "Acme Ltd", "North", 1450, 4],
-  ];
-  const FEB_HEAD = ["order_id", "AMOUNT", "Customer", "region", "order_date", "Channel"];
-  const FEB = [
-    [20, 1500, "Acme Ltd", "North", "2024-02-02", "Direct"],
-    [21, 1050, "Gamma Co", "East", "2024-02-05", "Partner"],
-    [22, 640, "Delta Supplies", "West", "2024-02-09", "Direct"],
-    [23, 2300, "Epsilon PLC", "South", "2024-02-14", "Partner"],
-    [24, 480, "Beta Trading", "South", "2024-02-20", "Direct"],
-  ];
-  const MAR_HEAD = ["Order ID", "Order Date", "Client Name", "Region", "Amount", "Units"];
-  const MAR = [
-    [40, "2024-03-01", "Acme Ltd", "North", 990, 2],
-    [41, "2024-03-06", "Zeta Holdings", "East", 3100, 7],
-    [42, "2024-03-12", "Gamma Co", "East", 780, 2],
-    [43, "2024-03-19", "Delta Supplies", "West", 1220, 3],
-  ];
-  const SRC = { Jan: "var(--s1)", Feb: "var(--s2)", Mar: "var(--s3)" };
-  const MERGED_HEAD = ["Source", "Order ID", "Order Date", "Customer", "Region", "Amount", "Units", "Channel"];
-  const MERGED_W = [70, 60, 88, 118, 62, 70, 48, 70];
-  const MERGED = [].concat(
-    JAN_CLEAN.map((r) => ["Jan", r[0], r[1], r[2], r[3], r[4], r[5], null]),
-    FEB.map((r) => ["Feb", r[0], r[4], r[2], r[3], r[1], null, r[5]]),
-    MAR.map((r) => ["Mar", r[0], r[1], r[2], r[3], r[4], r[5], null])
-  );
-  const MERGED_SORTED = MERGED.slice().sort((a, b) => b[5] - a[5]);
+  const HEAD = ["Order ID", "Order Date", "Customer", "Product", "Channel", "Units", "Revenue"];
+  const WIDTHS = [66, 86, 120, 138, 76, 50, 88];
+  const REGION_W = 74;
 
-  const REGION_TOTALS = (() => {
-    const totals = {};
-    MERGED.forEach((r) => { totals[r[4]] = (totals[r[4]] || 0) + r[5]; });
-    return Object.keys(totals).map((k) => [k, totals[k]]).sort((a, b) => b[1] - a[1]);
-  })();
-
-  const NEW_HEAD = ["Order ID", "Order Date", "Customer", "Region", "Amount", "Units"];
-  const APRIL = [
-    [60, "2024-04-03", "Acme Ltd", "North", 1310, 3],
-    [61, "2024-04-08", "Epsilon PLC", "South", 2750, 6],
-    [62, "2024-04-15", "Gamma Co", "East", 690, 2],
-    [63, "2024-04-22", "Beta Trading", "South", 1180, 3],
+  // Problem types, in the order the pane lists them. Colours are for scanning
+  // at a glance; the pane names each one, so colour never carries it alone.
+  const PROBLEMS = [
+    { id: "num", label: "Numbers stored as text", color: "var(--s1)" },
+    { id: "date", label: "Dates typed 5 different ways", color: "var(--s2)" },
+    { id: "spell", label: "Same name spelled differently", color: "var(--s3)" },
+    { id: "space", label: "Extra and invisible spaces", color: "var(--s4)" },
+    { id: "total", label: "Subtotal and total rows", color: "var(--s5)" },
+    { id: "group", label: "Group headings", color: "var(--s6)" },
+    { id: "dup", label: "Duplicate rows", color: "var(--s8)" },
+    { id: "misc", label: "Titles, notes, blank rows, N/A", color: "var(--s7)" },
   ];
-  const REPORT_W = [150, 80, 90, 64, 124];
-  const REPORT_OLD = [["Acme Ltd", "North", 1200, 3], ["Gamma Co", "East", 2200, 5], ["Delta Supplies", "West", 310, 1]];
-  const REPORT_NEW = APRIL.map((r) => [r[2], r[3], r[4], r[5]]);
+  const COLOR = Object.fromEntries(PROBLEMS.map((p) => [p.id, p.color]));
 
-  const fmtInt = (n) => n.toLocaleString("en-US");
-  const fmt2 = (n) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // The export is 99 rows; the grid shows the first 28. These whole-sheet
+  // totals are what Fix messy data reports on the sample workbook's
+  // "Sales Extract" sheet, which this demo is modelled on.
+  const FULL = { num: 89, date: 68, spell: 40, space: 29, total: 4, group: 3, dup: 4, misc: 12 };
+  const TOTAL_PROBLEMS = Object.values(FULL).reduce((a, b) => a + b, 0);
+  const ORDERS = 78;
+
+  // kind: title | blank | head | group | data | dup | total | repeat
+  // flags: { columnIndex: problemId } for data rows.
+  const MESS = [
+    { kind: "title", cells: ["ACME FOODS LTD - SALES EXTRACT, JAN-JUN 2024"] },
+    { kind: "title", cells: ["Generated 01/07/2024 by SAP ERP (user: finance01)"] },
+    { kind: "blank" },
+    { kind: "head", cells: HEAD },
+    { kind: "group", cells: ["Region: Europe"], region: "Europe" },
+    { kind: "data", cells: ["SO-5001", "2024-01-03", "Acme Ltd", "Jollof Rice Mix 1kg", "Online", 12, "$150.00"], flags: { 1: "date", 6: "num" } },
+    { kind: "data", cells: ["SO-5002", "05/01/2024", "ACME LTD", "Palm Oil 1L", "online", "8", "78.00"], flags: { 1: "date", 2: "spell", 4: "spell", 5: "num", 6: "num" } },
+    { kind: "data", cells: ["SO-5003", "Jan 9, 2024", "beta trading", "Suya Spice 100g", "Retail", 20, "1.120,00"], flags: { 1: "date", 2: "spell", 6: "num" } },
+    { kind: "data", cells: ["SO-5004", "14-Feb-2024", "Beta Trading", "Plantain Chips 150g", "Wholsale", 35, " $ 112.00"], flags: { 1: "date", 4: "spell", 6: "num" } },
+    { kind: "dup", cells: ["SO-5004", "14-Feb-2024", "Beta Trading", "Plantain Chips 150g", "Wholsale", 35, " $ 112.00"] },
+    { kind: "data", cells: ["SO-5005", 45352, " acme ltd ", "Zobo Drink 500ml", "Retail", "N/A", "(58.00)"], flags: { 2: "space", 5: "misc", 6: "num" } },
+    { kind: "total", cells: ["Europe Total", null, null, null, null, 75, "1,402.00"] },
+    { kind: "blank" },
+    { kind: "group", cells: ["Region: Africa"], region: "Africa" },
+    { kind: "data", cells: ["SO-5006", "02.03.2024", "Gamma Co", "Garri Ijebu 2kg", "Wholesale", 40, "296.00"], flags: { 1: "date", 6: "num" } },
+    { kind: "data", cells: ["SO-5007", "2024-03-11", "Gamma  Co", "Egusi Ground 500g", "Online", 15, "133.5O"], flags: { 1: "date", 2: "space", 6: "num" } },
+    { kind: "repeat", cells: HEAD },
+    { kind: "data", cells: ["SO-5008", "21/03/2024", "Delta Suplies", "Chin Chin 250g", "Retail", "30", "123.00-"], flags: { 1: "date", 2: "spell", 5: "num", 6: "num" } },
+    { kind: "data", cells: ["SO-5009", "Apr 2, 2024", "Delta Supplies", "Kunu Drink 500ml", "online", 48, "USD 132.00"], flags: { 1: "date", 4: "spell", 6: "num" } },
+    { kind: "data", cells: ["SO-5010", "18-Apr-2024", "Zeta Holdings", "Garri Ijebu 2kg", "Wholesale", 26, "192.40"], flags: { 1: "date", 6: "num" } },
+    { kind: "total", cells: ["Africa Total", null, null, null, null, 159, "630.90"] },
+    { kind: "blank" },
+    { kind: "group", cells: ["Region: Americas"], region: "Americas" },
+    { kind: "data", cells: ["SO-5011", "2024-04-15", "Harbor Foods", "Tiger Nut Milk 1L", "Retail", 22, "$138.60"], flags: { 1: "date", 6: "num" } },
+    { kind: "data", cells: ["SO-5012", "30/04/2024", "HARBOR FOODS", "Pepper Soup Spice", "Wholesale", 60, "291.00"], flags: { 1: "date", 2: "spell", 6: "num" } },
+    { kind: "data", cells: ["SO-5013", "May 3, 2024", "Sol Markets ", "Puff Puff Mix 500g", "Online", 18, "71.10"], flags: { 1: "date", 2: "space", 6: "num" } },
+    { kind: "data", cells: ["SO-5014", "07.05.2024", "Northwind Grocers", "Zobo Drink 500ml", "Retail", "24", "$69.60"], flags: { 1: "date", 5: "num", 6: "num" } },
+    { kind: "data", cells: ["SO-5015", "2024-05-12", "NORTHWIND GROCERS", "Chin Chin 250g", "Online", 50, "205,00"], flags: { 1: "date", 2: "spell", 6: "num" } },
+  ];
+
+  // What each data row of MESS becomes, as displayed, in order.
+  const CLEAN = [
+    ["SO-5001", "2024-01-03", "Acme Ltd", "Jollof Rice Mix 1kg", "Online", "12", "$150.00"],
+    ["SO-5002", "2024-01-05", "Acme Ltd", "Palm Oil 1L", "Online", "8", "$78.00"],
+    ["SO-5003", "2024-01-09", "Beta Trading", "Suya Spice 100g", "Retail", "20", "$1,120.00"],
+    ["SO-5004", "2024-02-14", "Beta Trading", "Plantain Chips 150g", "Wholesale", "35", "$112.00"],
+    ["SO-5005", "2024-03-01", "Acme Ltd", "Zobo Drink 500ml", "Retail", "", "-$58.00"],
+    ["SO-5006", "2024-03-02", "Gamma Co", "Garri Ijebu 2kg", "Wholesale", "40", "$296.00"],
+    ["SO-5007", "2024-03-11", "Gamma Co", "Egusi Ground 500g", "Online", "15", "$133.50"],
+    ["SO-5008", "2024-03-21", "Delta Supplies", "Chin Chin 250g", "Retail", "30", "-$123.00"],
+    ["SO-5009", "2024-04-02", "Delta Supplies", "Kunu Drink 500ml", "Online", "48", "$132.00"],
+    ["SO-5010", "2024-04-18", "Zeta Holdings", "Garri Ijebu 2kg", "Wholesale", "26", "$192.40"],
+    ["SO-5011", "2024-04-15", "Harbor Foods", "Tiger Nut Milk 1L", "Retail", "22", "$138.60"],
+    ["SO-5012", "2024-04-30", "Harbor Foods", "Pepper Soup Spice", "Wholesale", "60", "$291.00"],
+    ["SO-5013", "2024-05-03", "Sol Markets", "Puff Puff Mix 500g", "Online", "18", "$71.10"],
+    ["SO-5014", "2024-05-07", "Northwind Grocers", "Zobo Drink 500ml", "Retail", "24", "$69.60"],
+    ["SO-5015", "2024-05-12", "Northwind Grocers", "Chin Chin 250g", "Online", "50", "$205.00"],
+  ];
+
+  // More of the clean table, which scrolls into view once the fix is done.
+  const MORE = [
+    ["Americas", "SO-5016", "2024-05-18", "Harbor Foods", "Jollof Rice Mix 1kg", "Wholesale", "44", "$550.00"],
+    ["Americas", "SO-5017", "2024-05-22", "Sol Markets", "Palm Oil 1L", "Retail", "16", "$156.00"],
+    ["Americas", "SO-5018", "2024-05-29", "Northwind Grocers", "Suya Spice 100g", "Online", "25", "$140.00"],
+    ["Americas", "SO-5019", "2024-06-03", "Harbor Foods", "Garri Ijebu 2kg", "Retail", "30", "$222.00"],
+    ["Americas", "SO-5020", "2024-06-07", "Sol Markets", "Kunu Drink 500ml", "Online", "36", "$99.00"],
+    ["Americas", "SO-5021", "2024-06-11", "Northwind Grocers", "Egusi Ground 500g", "Wholesale", "28", "$249.20"],
+    ["Americas", "SO-5022", "2024-06-14", "Harbor Foods", "Tiger Nut Milk 1L", "Online", "19", "$119.70"],
+    ["Americas", "SO-5023", "2024-06-18", "Sol Markets", "Plantain Chips 150g", "Retail", "40", "$128.00"],
+    ["Americas", "SO-5024", "2024-06-21", "Northwind Grocers", "Pepper Soup Spice", "Online", "22", "$106.70"],
+    ["Americas", "SO-5025", "2024-06-24", "Harbor Foods", "Chin Chin 250g", "Wholesale", "55", "$225.50"],
+    ["Americas", "SO-5026", "2024-06-27", "Sol Markets", "Zobo Drink 500ml", "Retail", "33", "$95.70"],
+    ["Americas", "SO-5027", "2024-06-30", "Northwind Grocers", "Puff Puff Mix 500g", "Online", "27", "$106.65"],
+  ];
+
+  const money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   // ---------------------------------------------------------------------------
-  // The grid
+  // Grid
   // ---------------------------------------------------------------------------
-  const cellsEl = $("#cells"), cellWrap = $("#cellWrap"), sel = $("#sel");
-  const colHead = $("#colHead"), gutter = $("#gutter");
-  const ROWS = 18, ROW_H = 25, FILL_W = 76;
-  let G = { rows: [], widths: [] };
+  const cellsEl = $("#cells"), colHead = $("#colHead"), gutter = $("#gutter"), beam = $("#beam");
+  const ROWS = 28, ROW_H = 20, FILL_W = 70;
+  let G = { rows: [] };
+  let curWidths = WIDTHS;
 
   for (let i = 1; i <= ROWS; i += 1) {
     const s = document.createElement("span");
@@ -1354,87 +1122,88 @@ footer p { margin: 0; max-width: 60ch; }
     gutter.appendChild(s);
   }
 
-  function cellHTML(v, cls) {
+  function cellHTML(v) {
     if (v == null || v === "") return "";
-    if (typeof v === "object" && v.html) return v.html;
-    if (typeof v === "number") return '<span class="v">' + (cls && cls.indexOf("dec") >= 0 ? fmt2(v) : v >= 1000 ? fmtInt(v) : v) + "</span>";
     const text = String(v);
-    const lead = text.match(/^ */)[0].length;
-    const trail = text.match(/ *$/)[0].length;
-    const core = text.trim();
-    const dots = (n) => '<span class="ws">·</span>'.repeat(n);
-    return '<span class="v">' + dots(lead) + esc(core) + dots(trail) + "</span>";
+    const shown = text.replace(/^ +| +$/g, (m) => "·".repeat(m.length));
+    return '<span class="v">' + esc(shown).replace(/·/g, '<span style="color:var(--bad-ink)">·</span>') + "</span>";
   }
 
-  function chipHTML(src) {
-    return '<span class="v chip"><i style="background:' + SRC[src] + '"></i>' + src + "</span>";
+  function setColHead(widths) {
+    const all = widths.concat(new Array(8).fill(FILL_W));
+    colHead.innerHTML = '<span class="x-corner"></span>' + all.map((w, i) => '<span style="width:' + w + 'px">' + String.fromCharCode(65 + i) + "</span>").join("");
   }
 
-  /** spec: { widths, rows: [[...]], cls(r, c, v) -> "classes" } */
-  function buildGrid(spec) {
+  function makeRow(values, widths, opts) {
+    opts = opts || {};
+    const row = document.createElement("div");
+    row.className = "x-row" + (opts.rowClass ? " " + opts.rowClass : "");
+    const all = widths.concat(new Array(8).fill(FILL_W));
+    const cells = all.map((w, c) => {
+      const cell = document.createElement("div");
+      const v = values ? values[c] : null;
+      cell.className = "x-c" + (opts.cls ? " " + (opts.cls(c, v) || "") : "") + (typeof v === "number" ? " num" : "");
+      cell.style.width = w + "px";
+      cell.innerHTML = opts.html ? opts.html(c, v) : cellHTML(v);
+      row.appendChild(cell);
+      return cell;
+    });
+    return { el: row, cells };
+  }
+
+  function buildMess() {
     cellsEl.innerHTML = "";
-    cellWrap.querySelectorAll(".x-chart").forEach((n) => n.remove());
-    hideSel();
-    const widths = spec.widths.concat(new Array(8).fill(FILL_W));
-    colHead.innerHTML = '<span class="x-corner"></span>' + widths.map((w, i) => '<span style="width:' + w + 'px">' + String.fromCharCode(65 + i) + "</span>").join("");
-    G = { rows: [], widths };
-    for (let r = 0; r < ROWS; r += 1) G.rows.push(makeRow(spec, r, spec.rows[r]));
-  }
-
-  function makeRow(spec, r, data) {
-    const row = document.createElement("div");
-    row.className = "x-row" + (spec.rowCls ? " " + (spec.rowCls(r, data) || "") : "");
-    const cells = G.widths.map((w, c) => {
-      const cell = document.createElement("div");
-      const v = data ? data[c] : null;
-      const cls = spec.cls ? spec.cls(r, c, v) || "" : "";
-      cell.className = "x-c " + cls + (typeof v === "number" ? " num" : "");
-      cell.style.width = w + "px";
-      cell.innerHTML = cellHTML(v, cls);
-      row.appendChild(cell);
-      return cell;
+    curWidths = WIDTHS;
+    setColHead(WIDTHS);
+    G = { rows: [] };
+    MESS.forEach((spec) => {
+      let cls = null;
+      if (spec.kind === "title") cls = (c) => (c === 0 ? (spec.cells[0].startsWith("ACME") ? "t" : "note") : "");
+      else if (spec.kind === "note") cls = (c) => (c === 0 ? "note" : "");
+      else if (spec.kind === "group") cls = (c) => (c === 0 ? "sec" : "");
+      else if (spec.kind === "total") cls = (c) => (c === 0 ? "h ov" : "h");
+      else if (spec.kind === "head" || spec.kind === "repeat") cls = () => "h";
+      const r = makeRow(spec.cells || [], WIDTHS, { cls });
+      r.spec = spec;
+      cellsEl.appendChild(r.el);
+      G.rows.push(r);
     });
-    cellsEl.appendChild(row);
-    return { el: row, cells };
+    while (G.rows.length < ROWS) {
+      const r = makeRow([], WIDTHS);
+      r.spec = { kind: "filler" };
+      cellsEl.appendChild(r.el);
+      G.rows.push(r);
+    }
   }
 
-  function blankRow() {
-    const row = document.createElement("div");
-    row.className = "x-row";
-    const cells = G.widths.map((w) => {
-      const cell = document.createElement("div");
-      cell.className = "x-c";
-      cell.style.width = w + "px";
-      row.appendChild(cell);
-      return cell;
+  function flagRow(r) {
+    const spec = r.spec;
+    // Blank rows count as a problem but have nothing to tint.
+    if (spec.kind === "blank") return ["misc"];
+    const rowFlag = { total: "total", group: "group", title: "misc", dup: "dup", repeat: "misc" }[spec.kind];
+    if (rowFlag) {
+      r.el.classList.add("flagrow");
+      r.el.style.setProperty("--fc", COLOR[rowFlag]);
+      return [rowFlag];
+    }
+    if (spec.kind === "data") {
+      return Object.entries(spec.flags).map(([c, f]) => {
+        const cell = r.cells[+c];
+        cell.classList.add("flag");
+        cell.style.setProperty("--fc", COLOR[f]);
+        return f;
+      });
+    }
+    return [];
+  }
+
+  function flagAll() { G.rows.forEach(flagRow); }
+
+  function unflagAll() {
+    G.rows.forEach((r) => {
+      r.el.classList.remove("flagrow");
+      r.cells.forEach((c) => c.classList.remove("flag"));
     });
-    return { el: row, cells };
-  }
-
-  function ref(r, c) { return String.fromCharCode(65 + c) + (r + 1); }
-
-  function select(r1, c1, r2, c2) {
-    const a = G.rows[r1].cells[c1], b = G.rows[r2].cells[c2];
-    const top = G.rows[r1].el.offsetTop, bottom = G.rows[r2].el.offsetTop + G.rows[r2].el.offsetHeight;
-    sel.style.left = a.offsetLeft - 1 + "px";
-    sel.style.top = top - 1 + "px";
-    sel.style.width = b.offsetLeft + b.offsetWidth - a.offsetLeft + 1 + "px";
-    sel.style.height = bottom - top + 1 + "px";
-    sel.style.opacity = "1";
-    colHead.querySelectorAll("span").forEach((s, i) => s.classList.toggle("on", i >= c1 + 1 && i <= c2 + 1));
-    gutter.querySelectorAll("span").forEach((s, i) => s.classList.toggle("on", i >= r1 && i <= r2));
-    $("#nameBox").textContent = ref(r1, c1);
-  }
-
-  function hideSel() {
-    sel.style.opacity = "0";
-    colHead.querySelectorAll("span").forEach((s) => s.classList.remove("on"));
-    gutter.querySelectorAll("span").forEach((s) => s.classList.remove("on"));
-  }
-
-  function setFx(name, value) {
-    $("#nameBox").textContent = name;
-    $("#fxVal").textContent = value;
   }
 
   function flash(el) {
@@ -1443,52 +1212,54 @@ footer p { margin: 0; max-width: 60ch; }
     el.classList.add("x-flash");
   }
 
-  async function swapCell(cell, value, opts) {
-    opts = opts || {};
+  async function swapCell(cell, value, num) {
     const old = cell.querySelector(".v");
-    if (old) await A(old, [{ opacity: 1, transform: "translateY(0)" }, { opacity: 0, transform: "translateY(-6px)" }], { duration: 160 });
-    cell.innerHTML = cellHTML(value, opts.cls || "");
-    if (opts.num != null) cell.classList.toggle("num", opts.num);
+    if (old) await A(old, [{ opacity: 1, transform: "translateY(0)" }, { opacity: 0, transform: "translateY(-5px)" }], { duration: 140 });
+    cell.innerHTML = value == null ? "" : '<span class="v">' + esc(value) + "</span>";
+    cell.classList.toggle("num", !!num);
+    cell.classList.remove("flag");
     flash(cell);
     const nu = cell.querySelector(".v");
-    if (nu) await A(nu, [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 200 });
+    if (nu) await A(nu, [{ opacity: 0, transform: "translateY(5px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 180 });
   }
 
-  async function collapseRow(index) {
-    const row = G.rows[index];
-    await A(row.el, [{ height: ROW_H + "px", opacity: 1 }, { height: "0px", opacity: 0 }], { duration: 480 });
-    row.el.remove();
-    G.rows.splice(index, 1);
-    const filler = blankRow();
-    cellsEl.appendChild(filler.el);
-    G.rows.push(filler);
+  async function collapse(rows) {
+    await Promise.all(rows.map((r, i) => A(r.el, [{ height: ROW_H + "px", opacity: 1 }, { height: "0px", opacity: 0 }], { duration: 420, delay: i * 40 })));
+    rows.forEach((r) => {
+      r.el.remove();
+      G.rows.splice(G.rows.indexOf(r), 1);
+    });
+    while (G.rows.length < ROWS) {
+      const filler = makeRow([], curWidths);
+      filler.spec = { kind: "filler" };
+      cellsEl.appendChild(filler.el);
+      G.rows.push(filler);
+    }
   }
 
   // ---------------------------------------------------------------------------
   // Tabs, pane, cursor
   // ---------------------------------------------------------------------------
   const tabsEl = $("#tabs");
-  const BASE_TABS = ["Jan Orders", "Feb Orders", "Mar Orders", "New Data", "Sales Report"];
+  const BASE_TABS = ["Jan Orders", "Feb Orders", "Mar Orders", "Sales Extract"];
   function setTabs(names, active) {
     tabsEl.innerHTML = names.map((n) => '<span class="x-tab' + (n === active ? " on" : "") + '" data-tab="' + n + '">' + n + "</span>").join("");
   }
-  function activateTab(name) {
-    tabsEl.querySelectorAll(".x-tab").forEach((t) => t.classList.toggle("on", t.dataset.tab === name));
-  }
+  function activateTab(name) { tabsEl.querySelectorAll(".x-tab").forEach((t) => t.classList.toggle("on", t.dataset.tab === name)); }
   async function addTab(name) {
     const t = document.createElement("span");
-    t.className = "x-tab new";
+    t.className = "x-tab";
     t.dataset.tab = name;
     t.textContent = name;
     tabsEl.appendChild(t);
     activateTab(name);
-    await A(t, [{ maxWidth: "0px", opacity: 0 }, { maxWidth: "140px", opacity: 1 }], { duration: 380 });
+    await A(t, [{ maxWidth: "0px", opacity: 0 }, { maxWidth: "220px", opacity: 1 }], { duration: 380 });
   }
   const tab = (name) => tabsEl.querySelector('[data-tab="' + name + '"]');
 
   const pane = $("#pane"), paneIn = $("#paneIn");
-  function paneOpen(open) { pane.style.width = open ? "300px" : "0px"; }
-  async function openPane() { await A(pane, [{ width: "0px" }, { width: "300px" }], { duration: 480 }); }
+  function paneOpen(open) { pane.style.width = open ? "320px" : "0px"; }
+  async function openPane() { await A(pane, [{ width: "0px" }, { width: "320px" }], { duration: 480 }); }
   async function setPane(html) {
     await A(paneIn, [{ opacity: 1, transform: "translateX(0)" }, { opacity: 0, transform: "translateX(-14px)" }], { duration: 150 });
     paneIn.innerHTML = html;
@@ -1496,95 +1267,71 @@ footer p { margin: 0; max-width: 60ch; }
   }
   const q = (s) => paneIn.querySelector(s) || stage.querySelector(s);
 
-  function head(title, icon) {
-    return '<div class="p-head"><span class="back">' + IC.back + "</span>" + icon + "<span>" + title + "</span></div>";
-  }
+  function head(title, icon) { return '<div class="p-head"><span class="back">' + IC.back + "</span>" + icon + "<span>" + title + "</span></div>"; }
   function homeView() {
+    const tool = (id, title, desc, icon, feat) =>
+      '<div class="p-tool' + (feat ? " feat" : "") + '" data-t="tool-' + id + '"><span class="p-ic' + (icon === "fx" ? " fx" : "") + '">' + icon + "</span><span><b>" + title + "</b><small>" + desc + '</small></span><span class="p-chev">›</span></div>';
     return '<div class="p-head">' + IC.logo + "<span>MEx Automate</span></div>" +
       '<div class="p-body"><div class="p-hello">What would you like to do?</div>' +
-      TOOLS.map((t) => '<div class="p-tool" data-t="tool-' + t[0] + '"><span class="p-ic' + (t[3] === "fx" ? " fx" : "") + '">' + t[3] + "</span><span><b>" + t[1] + "</b><small>" + t[2] + '</small></span><span class="p-chev">›</span></div>').join("") +
+      tool("tidy", "Fix messy data", "Titles, totals, text numbers, mixed dates, typos: fixed in one click.", IC.fix, true) +
+      tool("dash", "Build a dashboard", "Up to 8 charts and headline numbers, laid out for you.", IC.dash, true) +
+      '<div class="p-label">More tools</div>' +
+      tool("clean", "Quick clean-ups", "One fix at a time.", IC.clean) +
+      tool("merge", "Combine sheets", "Stack sheets or files into one table.", IC.stack) +
+      tool("chart", "Make a chart", "One chart or a summary table.", IC.pie) +
+      tool("formulas", "Formulas", "Copy one down, or insert one.", "fx") +
+      tool("report", "Update a report", "New data in, layout untouched.", IC.sync) +
       "</div>";
   }
-  function card(id, icon, title, desc, body) {
-    return '<div class="p-card" data-card="' + id + '"><div class="p-card-h"><span class="p-ic">' + icon + "</span><span><b>" + title + "</b><small>" + desc + '</small></span><span class="p-chev">›</span></div><div class="p-card-b">' + body + "</div></div>";
-  }
-  function cleanView() {
-    return head("Clean up data", IC.clean) + '<div class="p-body">' +
-      '<div class="p-selbar">' + IC.table + '<span><small>Working on</small><b id="pSel">Click a cell</b></span></div>' +
-      '<div class="p-radio"><span><i class="on"></i>Selected cells</span><span><i></i>Whole sheet</span></div>' +
-      card("dup", IC.copy, "Remove duplicates", "Keep the first of each repeated row.", '<div class="p-line"><span class="p-radio"><span><i class="on"></i>Every cell must match</span></span></div><div class="p-btn" data-t="dup">Remove duplicates</div>') +
-      card("trim", IC.eraser, "Remove extra spaces", "Including invisible ones.", '<div class="p-btn" data-t="trim">Remove extra spaces</div>') +
-      card("case", IC.case, "Fix capital letters", "Formulas are never changed.", '<div class="p-grid2"><div class="p-btn two">UPPER CASE</div><div class="p-btn two">lower case</div><div class="p-btn two" data-t="case-title">Title Case</div><div class="p-btn two">Sentence case</div></div>') +
-      card("dates", IC.cal, "Fix dates", "Text dates become real dates.", '<div class="p-dd">Show as 2024-03-09 (ISO)</div><div class="p-line"><span class="p-switch on"></span>Day first: 03/04 is 3 April</div><div class="p-btn" data-t="dates">Fix dates</div>') +
+  function tidyView() {
+    return head("Fix messy data", IC.fix) + '<div class="p-body">' +
+      '<div class="p-card"><div class="p-step"><span class="p-num">1</span><span><b>Which data?</b></span></div><div class="p-dd">The sheet I\'m on</div></div>' +
+      '<div class="p-card"><div class="p-step"><span class="p-num">2</span><span><b>What we found</b></span></div>' +
+      '<div class="p-big"><b id="probCount">0</b><span id="probText">Scanning...</span></div><div id="findList">' +
+      PROBLEMS.map((p) => '<div class="p-find" id="find-' + p.id + '" style="--fc:' + p.color + ';opacity:.25"><span class="sw"></span><span>' + p.label + '</span><span class="cnt" id="cnt-' + p.id + '">0</span></div>').join("") +
+      "</div></div>" +
+      '<div class="p-card" id="fixCard"><div class="p-step"><span class="p-num">3</span><span><b>Fix it</b></span></div>' +
+      '<div class="p-btn" data-t="fix" id="fixBtn" style="opacity:.45">Fix problems</div>' +
+      '<div class="p-hint">Your original sheet isn\'t changed. The clean table goes on a new sheet.</div></div>' +
       "</div>";
   }
-  function combineView(stepNo) {
-    const done = (n, t, sub) => '<div class="p-card"><div class="p-step"><span class="p-num done">✓</span><span><b>' + t + '</b><span class="p-hint">' + sub + "</span></span></div></div>";
-    let html = head("Combine sheets", IC.stack) + '<div class="p-body">';
-    if (stepNo === 1) {
-      html += '<div class="p-card"><div class="p-step"><span class="p-num">1</span><span><b>Choose what to combine</b><span class="p-hint">Tick two or more sheets.</span></span></div>' +
-        BASE_TABS.map((n, i) => '<div class="p-line"><span class="p-box" data-t="box-' + i + '"></span>' + n + "</div>").join("") + "</div>" +
-        '<div class="p-card"><div class="p-step"><span class="p-num" style="opacity:.4">2</span><span><b>Check the columns</b><span class="p-hint">Tick at least two sheets above.</span></span></div></div>';
-    } else if (stepNo === 2) {
-      html += done(1, "3 sheets chosen", "Jan, Feb and Mar Orders") +
-        '<div class="p-card"><div class="p-step"><span class="p-num">2</span><span><b>Check the columns</b><span class="p-hint">Lined up by name, even when spelled differently.</span></span></div>' +
-        '<div class="p-cols">' +
-        ["Order ID", "Order Date"].map((n) => '<div class="p-colrow"><span class="p-okdot"></span>' + n + "</div>").join("") +
-        '<div class="p-colrow" id="rowCustomer"><span class="p-warndot" id="custDot"></span>Customer<em id="custNote">Only in Jan, Feb</em></div>' +
-        ["Region", "Amount"].map((n) => '<div class="p-colrow"><span class="p-okdot"></span>' + n + "</div>").join("") +
-        '<div class="p-colrow"><span class="p-warndot"></span>Units<em>Only in Jan, Mar</em></div>' +
-        '<div class="p-colrow"><span class="p-warndot"></span>Channel<em>Only in Feb</em></div>' +
-        '<div class="p-colrow" id="rowClient" style="flex-wrap:wrap;padding:4px 0"><span class="p-warndot"></span>Client Name<em>Only in Mar</em><div class="p-dd" data-t="dd-client" style="width:100%">Same as another column?</div></div>' +
-        "</div>" +
-        '<div class="p-hint" id="matchLine" hidden>Matched: <b>Client Name</b> goes into <b>Customer</b>. <span style="color:var(--accent);font-weight:600">Undo</span></div>' +
-        "</div>";
-    } else {
-      html += done(1, "3 sheets chosen", "Jan, Feb and Mar Orders") +
-        done(2, "8 columns lined up", "Client Name goes into Customer") +
-        '<div class="p-card" id="step3"><div class="p-step"><span class="p-num">3</span><span><b>Create the combined table</b></span></div>' +
-        '<span class="p-label">New sheet</span><div class="p-input">Merged</div>' +
-        '<span class="p-label">Sort rows by</span><div class="p-dd" data-t="dd-sort" id="sortDd">Keep original order</div>' +
-        '<div class="p-line"><span class="p-switch" data-t="sw-desc" id="swDesc"></span><span id="swLabel">Smallest / A first</span></div>' +
-        '<div class="p-btn" data-t="combine">Combine 3 sheets</div></div>';
-    }
-    return html + "</div>";
-  }
-  function chartView() {
-    return head("Make a chart", IC.pie) + '<div class="p-body">' +
-      '<div class="p-card"><div class="p-step"><span class="p-num done">✓</span><span><b>Data: Merged (sheet)</b><span class="p-hint">8 columns: Source, Order ID, Order Date, ...</span></span></div></div>' +
-      '<div class="p-card"><div class="p-step"><span class="p-num">2</span><span><b>What should it show?</b></span></div>' +
-      '<div class="p-line"><span class="p-switch on"></span>Add up my data first</div>' +
-      '<div class="p-sentence">Calculate the <span class="p-pill">Sum</span> of <span class="p-pill">Amount</span> for each <span class="p-pill" data-t="dd-each" id="eachPill">Customer</span></div></div>' +
-      '<div class="p-card"><div class="p-step"><span class="p-num">3</span><span><b>Pick a chart</b></span></div><div class="p-shapes">' +
-      SHAPES.map((s, i) => '<div class="p-shape' + (i === 0 ? " on" : "") + '" data-t="shape-' + s[0] + '">' + s[2] + s[1] + "</div>").join("") + "</div></div>" +
-      '<div class="p-card" id="chartFinish"><div class="p-step"><span class="p-num">4</span><span><b>Finish</b></span></div>' +
-      '<div class="p-input" id="titleInput"><span id="titleText">Sum of Amount by Customer</span><span class="caret" hidden id="caret"></span></div>' +
-      '<div class="p-btn" data-t="create">Create chart</div></div>' +
+  const SUGGESTIONS = [
+    ["line", "Revenue over time"],
+    ["col", "Revenue by Region"],
+    ["donut", "Share of Revenue by Category"],
+    ["stackc", "Revenue by Region and Category"],
+    ["line", "Revenue over time by Region"],
+    ["bar", "Top 10 Product by Revenue"],
+    ["col", "Units by Region"],
+    ["dots", "Revenue vs Units"],
+  ];
+  function dashView() {
+    return head("Build a dashboard", IC.dash) + '<div class="p-body">' +
+      '<div class="p-card"><div class="p-step"><span class="p-num">1</span><span><b>Which data?</b></span></div><div class="p-dd">Sales Extract (sheet)</div>' +
+      '<div class="p-tip">' + ORDERS + " orders, 8 columns. " + TOTAL_PROBLEMS + ' data problems will be smoothed over for the charts; your sheet stays as it is.</div></div>' +
+      '<div class="p-card"><div class="p-step"><span class="p-num">2</span><span><b>Pick your charts (up to 8)</b></span></div><div id="sugList" style="display:flex;flex-direction:column;gap:3px">' +
+      SUGGESTIONS.map((s) => '<div class="p-sug" style="opacity:0"><span class="bx"></span><span class="ki">' + IC[s[0]] + "</span>" + s[1] + "</div>").join("") +
+      '</div><div class="p-line"><span class="p-switch"></span>Headline numbers across the top</div></div>' +
+      '<div class="p-card" id="buildCard"><div class="p-step"><span class="p-num">3</span><span><b>Build it</b></span></div>' +
+      '<div class="p-btn" data-t="build">' + IC.dash.replace("<svg", '<svg width="15" height="15"') + "Build dashboard with 8 charts</div></div>" +
       "</div>";
   }
-  function reportView() {
-    return head("Update a report", IC.sync) + '<div class="p-body">' +
-      '<div class="p-card" id="savedCard"><b style="font-size:12.5px">Your saved reports</b>' +
-      '<div class="p-saved"><span class="p-ic">' + IC.table + '</span><span><b>Monthly sales</b><small>Data from "New Data"</small></span><span class="p-edit">Edit</span></div>' +
-      '<div class="p-btn" data-t="update">' + IC.sync.replace("<svg", '<svg width="15" height="15"') + 'Update "Monthly sales" now</div></div>' +
-      '<div class="p-hint" style="padding:0 2px">Titles, totals and formula columns stay put. Only the data rows change.</div>' +
+  function savedView() {
+    return head("Build a dashboard", IC.dash) + '<div class="p-body">' +
+      '<div class="p-card" id="savedCard"><b style="font-size:12.5px">Your dashboards</b>' +
+      '<div class="p-line"><span class="p-ic">' + IC.dash + '</span><span><b style="display:block;font-size:12px">Sales Extract dashboard</b><span class="p-hint">8 charts · from "Sales Extract"</span></span></div>' +
+      '<div class="p-btn two" data-t="refresh">' + IC.sync.replace("<svg", '<svg width="15" height="15"') + "Refresh with the latest data</div></div>" +
+      '<div class="p-hint" style="padding:0 2px">Charts find their columns by name, so a new export with its columns in another order still works.</div>' +
       "</div>";
-  }
-
-  async function openCard(id) {
-    paneIn.querySelectorAll(".p-card").forEach((c) => c.classList.toggle("open", c.dataset.card === id));
-    const body = paneIn.querySelector('[data-card="' + id + '"] .p-card-b');
-    if (body) await A(body, [{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 260 });
   }
 
   async function banner(container, title, text) {
     const b = document.createElement("div");
     b.className = "x-banner";
-    b.innerHTML = '<span class="p-okdot"></span><span><b>' + title + "</b>" + text + "</span>";
+    b.innerHTML = '<span class="okdot">✓</span><span><b>' + title + "</b>" + text + "</span>";
     container.appendChild(b);
     await A(b, [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 300 });
   }
-
   async function busy(btn, ms) {
     const label = btn.innerHTML;
     btn.classList.add("busy");
@@ -1595,7 +1342,7 @@ footer p { margin: 0; max-width: 60ch; }
   }
 
   const cursor = $("#cursor");
-  let cx = 900, cy = 470;
+  let cx = 1000, cy = 560;
   function placeCursor(x, y) { cx = x; cy = y; cursor.style.transform = "translate(" + x + "px," + y + "px)"; }
   function point(el, ox, oy) {
     const s = stage.getBoundingClientRect(), r = el.getBoundingClientRect();
@@ -1606,7 +1353,7 @@ footer p { margin: 0; max-width: 60ch; }
     const from = "translate(" + cx + "px," + cy + "px)";
     const d = Math.hypot(p[0] - cx, p[1] - cy);
     cx = p[0]; cy = p[1];
-    await A(cursor, [{ transform: from }, { transform: "translate(" + cx + "px," + cy + "px)" }], { duration: 280 + Math.min(560, d * 0.85) });
+    await A(cursor, [{ transform: from }, { transform: "translate(" + cx + "px," + cy + "px)" }], { duration: 280 + Math.min(560, d * 0.8) });
   }
   async function click(el) {
     const ring = document.createElement("div");
@@ -1620,7 +1367,6 @@ footer p { margin: 0; max-width: 60ch; }
     if (el) el.classList.remove("x-press");
   }
   async function press(el, ox, oy) { await moveTo(el, ox, oy); await click(el); }
-
   async function keycap(keys) {
     const k = document.createElement("div");
     k.className = "keycap";
@@ -1633,50 +1379,225 @@ footer p { margin: 0; max-width: 60ch; }
   }
 
   // ---------------------------------------------------------------------------
-  // Sheets
+  // Mini charts: plain SVG drawn from data at progress p (0..1), so the same
+  // functions draw the entrance and the month-to-month refresh.
   // ---------------------------------------------------------------------------
-  function janGrid(rows) {
-    buildGrid({
-      widths: JAN_W,
-      rows: [JAN_HEAD].concat(rows),
-      cls: (r) => (r === 0 ? "h" : ""),
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"];
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const lerpArr = (a, b, t) => b.map((v, i) => lerp(a[i] == null ? v : a[i], v, t));
+
+  function frame(w, h, max, ticks) {
+    let s = "";
+    for (let i = 1; i <= ticks; i += 1) {
+      const y = h - 14 - ((h - 22) * i) / ticks;
+      s += '<line x1="30" x2="' + (w - 4) + '" y1="' + y + '" y2="' + y + '" stroke="var(--gridline)" stroke-width="1"/>';
+      s += '<text x="26" y="' + (y + 3) + '" text-anchor="end">' + Math.round((max * i) / ticks / 100) / 10 + "k</text>";
+    }
+    s += '<line x1="30" x2="' + (w - 4) + '" y1="' + (h - 14) + '" y2="' + (h - 14) + '" stroke="var(--ink-3)" stroke-width="1"/>';
+    return s;
+  }
+  function legend(w, items) {
+    let x = w - 6, s = "";
+    for (let i = items.length - 1; i >= 0; i -= 1) {
+      const label = items[i][0];
+      const width = label.length * 4.6 + 14;
+      x -= width;
+      s += '<rect x="' + x + '" y="1" width="7" height="7" rx="1.5" fill="' + items[i][1] + '"/><text class="lg" x="' + (x + 10) + '" y="8">' + label + "</text>";
+    }
+    return s;
+  }
+  function svgLine(w, h, series, slots, max, reveal) {
+    const plotW = w - 40, plotH = h - 22;
+    const x = (i) => 32 + (plotW * i) / Math.max(1, slots - 1);
+    const y = (v) => h - 14 - (plotH * v) / max;
+    let s = frame(w, h, max, 3);
+    const labels = Math.ceil(slots);
+    for (let i = 0; i < labels; i += 1) if (x(i) <= w) s += '<text x="' + x(i) + '" y="' + (h - 3) + '" text-anchor="middle">' + MONTHS[i] + "</text>";
+    series.forEach((sr) => {
+      const n = sr.values.length;
+      const shown = 1 + (n - 1) * reveal;
+      const pts = [];
+      for (let i = 0; i < n && i <= shown; i += 1) pts.push([x(i), y(sr.values[i])]);
+      const whole = Math.floor(shown);
+      if (whole < n - 1 && shown > whole) {
+        const f = shown - whole;
+        pts.push([lerp(x(whole), x(whole + 1), f), lerp(y(sr.values[whole]), y(sr.values[whole + 1]), f)]);
+      }
+      s += '<polyline fill="none" stroke="' + sr.color + '" stroke-width="2" stroke-linejoin="round" points="' + pts.map((p) => p.join(",")).join(" ") + '"/>';
+      pts.slice(0, whole + 1).forEach((p) => { s += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="2.4" fill="' + sr.color + '" stroke="var(--surface)" stroke-width="1"/>'; });
+    });
+    if (series.length > 1) s += legend(w, series.map((sr) => [sr.name, sr.color]));
+    return s;
+  }
+  function svgColumns(w, h, labels, values, color, max, p) {
+    const plotW = w - 40, slot = plotW / labels.length, bw = Math.min(46, slot * 0.56);
+    let s = frame(w, h, max, 3);
+    labels.forEach((label, i) => {
+      const cxp = 32 + slot * i + slot / 2;
+      const bh = ((h - 22) * values[i] * p) / max;
+      s += '<rect x="' + (cxp - bw / 2) + '" y="' + (h - 14 - bh) + '" width="' + bw + '" height="' + bh + '" rx="2" fill="' + color + '"><title>' + label + ": " + Math.round(values[i]).toLocaleString() + "</title></rect>";
+      s += '<text x="' + cxp + '" y="' + (h - 3) + '" text-anchor="middle">' + label + "</text>";
+    });
+    return s;
+  }
+  function svgStacked(w, h, labels, series, max, p) {
+    const plotW = w - 40, slot = plotW / labels.length, bw = Math.min(46, slot * 0.56);
+    let s = frame(w, h, max, 3);
+    labels.forEach((label, i) => {
+      const cxp = 32 + slot * i + slot / 2;
+      let base = h - 14;
+      series.forEach((sr) => {
+        const bh = ((h - 22) * sr.values[i] * p) / max;
+        s += '<rect x="' + (cxp - bw / 2) + '" y="' + (base - bh) + '" width="' + bw + '" height="' + Math.max(0, bh - 1) + '" fill="' + sr.color + '"/>';
+        base -= bh;
+      });
+      s += '<text x="' + cxp + '" y="' + (h - 3) + '" text-anchor="middle">' + label + "</text>";
+    });
+    return s + legend(w, series.map((sr) => [sr.name, sr.color]));
+  }
+  function svgBars(w, h, labels, values, color, max, p) {
+    const left = 96, plotW = w - left - 10, rowH = (h - 4) / labels.length;
+    let s = "";
+    labels.forEach((label, i) => {
+      const y = 2 + rowH * i;
+      const bw = (plotW * values[i] * p) / max;
+      s += '<text x="' + (left - 5) + '" y="' + (y + rowH * 0.68) + '" text-anchor="end">' + label + "</text>";
+      s += '<rect x="' + left + '" y="' + (y + rowH * 0.18) + '" width="' + bw + '" height="' + rowH * 0.64 + '" rx="1.5" fill="' + (label === "Other" ? "var(--s-other)" : color) + '"/>';
+    });
+    return s;
+  }
+  function svgDonut(w, h, slices, p) {
+    const total = slices.reduce((t, sl) => t + sl.value, 0);
+    const r = Math.min(h / 2 - 6, 40), cxp = 12 + r, cyp = h / 2, rr = r * 0.62, C = 2 * Math.PI * ((r + rr) / 2);
+    let s = "", angle = -90;
+    slices.forEach((sl) => {
+      const frac = sl.value / total;
+      const len = Math.max(0, frac * C * p - 1.5);
+      s += '<circle cx="' + cxp + '" cy="' + cyp + '" r="' + (r + rr) / 2 + '" fill="none" stroke="' + sl.color + '" stroke-width="' + (r - rr) + '" stroke-dasharray="' + len + " " + C + '" transform="rotate(' + angle + " " + cxp + " " + cyp + ')"><title>' + sl.label + "</title></circle>";
+      angle += frac * 360 * p;
+    });
+    slices.forEach((sl, i) => {
+      const y = cyp - (slices.length * 13) / 2 + i * 13 + 9;
+      s += '<rect x="' + (cxp + r + 16) + '" y="' + (y - 7) + '" width="8" height="8" rx="1.5" fill="' + sl.color + '"/><text class="lg" x="' + (cxp + r + 28) + '" y="' + y + '">' + sl.label + " " + Math.round((sl.value / total) * 100) + "%</text>";
+    });
+    return s;
+  }
+  function svgScatter(w, h, points, maxX, maxY, p) {
+    let s = frame(w, h, maxY, 3);
+    const n = Math.floor(points.length * p);
+    for (let i = 0; i < n; i += 1) {
+      const px = 32 + ((w - 40) * points[i][0]) / maxX;
+      const py = h - 14 - ((h - 22) * points[i][1]) / maxY;
+      s += '<circle cx="' + px + '" cy="' + py + '" r="2.6" fill="var(--s1)" fill-opacity=".75" stroke="var(--surface)" stroke-width=".8"/>';
+    }
+    s += '<text x="' + (w - 6) + '" y="' + (h - 3) + '" text-anchor="end">Units</text>';
+    return s;
+  }
+
+  // Dashboard data: this month, and next month after July's rows are pasted in.
+  const REGION_COLORS = { Europe: "var(--s1)", Africa: "var(--s2)", Americas: "var(--s3)" };
+  const CATEGORY_COLORS = { Staples: "var(--s1)", Snacks: "var(--s2)", Beverages: "var(--s3)", Spices: "var(--s4)" };
+  const SCATTER = (() => {
+    let seed = 11;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+    return Array.from({ length: 46 }, () => { const u = 2 + rnd() * 56; return [u, Math.max(20, u * (6 + rnd() * 3) + (rnd() - 0.5) * 90)]; });
+  })();
+  const JUNE = {
+    total: 9665.6, records: 78, top: 3610,
+    months: [1320, 1480, 1610, 1545, 1790, 1921],
+    regions: [3610, 3241, 2815],
+    categories: [3963, 2320, 1933, 1450],
+    stacked: [[1480, 1330, 1153], [866, 778, 676], [722, 648, 563], [542, 485, 423]],
+    byRegion: { Europe: [495, 552, 601, 577, 668, 717], Africa: [442, 494, 538, 516, 599, 652], Americas: [383, 434, 471, 452, 523, 552] },
+    products: [1610, 1390, 1120, 980, 870, 760, 690, 610, 540, 1096],
+    units: [1084, 986, 842],
+    scatter: 46,
+  };
+  const JULY = {
+    total: 11401.6, records: 92, top: 4250,
+    months: [1320, 1480, 1610, 1545, 1790, 1921, 1736],
+    regions: [4250, 3831, 3321],
+    categories: [4675, 2737, 2281, 1709],
+    stacked: [[1742, 1572, 1361], [1021, 920, 796], [851, 766, 664], [636, 573, 500]],
+    byRegion: { Europe: [495, 552, 601, 577, 668, 717, 640], Africa: [442, 494, 538, 516, 599, 652, 590], Americas: [383, 434, 471, 452, 523, 552, 506] },
+    products: [1900, 1640, 1322, 1156, 1027, 897, 814, 720, 637, 1289],
+    units: [1294, 1176, 1002],
+    scatter: 46,
+  };
+  const PRODUCTS = ["Jollof Rice Mix", "Palm Oil 1L", "Egusi Ground", "Garri Ijebu", "Suya Spice", "Tiger Nut Milk", "Plantain Chips", "Pepper Soup", "Zobo Drink", "Other"];
+  const REGIONS = ["Europe", "Africa", "Americas"];
+  const CATEGORIES = ["Staples", "Snacks", "Beverages", "Spices"];
+
+  // Card sizes in design px, matching the add-in's layout: a full-width trend,
+  // three pairs, then the odd one out full width again.
+  const DB_W = 820, HALF = (DB_W - 8) / 2;
+  const CARDS = [
+    { title: "Revenue over time", w: DB_W, h: 104 },
+    { title: "Revenue by Region", w: HALF, h: 104 },
+    { title: "Share of Revenue by Category", w: HALF, h: 104 },
+    { title: "Revenue by Region and Category", w: HALF, h: 104 },
+    { title: "Revenue over time by Region", w: HALF, h: 104 },
+    { title: "Top 10 Product by Revenue", w: HALF, h: 124 },
+    { title: "Units by Region", w: HALF, h: 124 },
+    { title: "Revenue vs Units", w: DB_W, h: 92 },
+  ];
+
+  /** Draw every chart for data `d` (optionally blended from `from` by t) at entrance progress `p`. */
+  function drawDashboard(d, from, t, p, only) {
+    const mix = (key) => (from ? lerpArr(from[key], d[key], t) : d[key]);
+    const slots = from ? lerp(from.months.length, d.months.length, t) : d.months.length;
+    const months = from && from.months.length < d.months.length ? from.months.concat([from.months[from.months.length - 1]]) : null;
+    const lineVals = months ? lerpArr(months, d.months, t) : mix("months");
+    const regionLines = REGIONS.map((r) => {
+      const a = from ? from.byRegion[r].concat(from.byRegion[r].length < d.byRegion[r].length ? [from.byRegion[r][from.byRegion[r].length - 1]] : []) : null;
+      return { name: r, color: REGION_COLORS[r], values: a ? lerpArr(a, d.byRegion[r], t) : d.byRegion[r] };
+    });
+    const stacked = CATEGORIES.map((c, i) => ({ name: c, color: CATEGORY_COLORS[c], values: from ? lerpArr(from.stacked[i], d.stacked[i], t) : d.stacked[i] }));
+    const draw = [
+      (w, h) => svgLine(w, h, [{ color: "var(--s1)", values: lineVals }], slots, 2400, p),
+      (w, h) => svgColumns(w, h, REGIONS, mix("regions"), "var(--s1)", 4800, p),
+      (w, h) => svgDonut(w, h, CATEGORIES.map((c, i) => ({ label: c, value: mix("categories")[i], color: CATEGORY_COLORS[c] })), p),
+      (w, h) => svgStacked(w, h, REGIONS, stacked, 4800, p),
+      (w, h) => svgLine(w, h, regionLines, slots, 900, p),
+      (w, h) => svgBars(w, h, PRODUCTS, mix("products"), "var(--s1)", 2000, p),
+      (w, h) => svgColumns(w, h, REGIONS, mix("units"), "var(--s1)", 1500, p),
+      (w, h) => svgScatter(w, h, SCATTER, 60, 600, p),
+    ];
+    document.querySelectorAll(".db-card svg").forEach((svg, i) => {
+      if (only != null && only !== i) return;
+      const card = CARDS[i];
+      svg.innerHTML = draw[i](card.w - 18, card.h - 22);
     });
   }
-  function sheetGrid(headRow, rows, widths) {
-    buildGrid({ widths, rows: [headRow].concat(rows), cls: (r) => (r === 0 ? "h" : "") });
+
+  function kpiHTML(d) {
+    return [
+      ["Total Revenue", money(d.total), ""],
+      ["Records", d.records.toLocaleString(), ""],
+      ["Average Revenue", money(d.total / d.records), "per record"],
+      ["Top Region", "Europe", money(d.top)],
+    ].map((k, i) => '<div class="db-kpi" data-k="' + i + '"><small>' + k[0] + "</small><b>" + k[1] + "</b><i>" + k[2] + "</i></div>").join("");
   }
-  function mergedGrid(rows) {
-    buildGrid({
-      widths: MERGED_W,
-      rows: [MERGED_HEAD].concat(rows.map((r) => [{ html: chipHTML(r[0]) }].concat(r.slice(1)))),
-      cls: (r) => (r === 0 ? "th" : ""),
-      rowCls: (r, d) => (r > 0 && d ? "band" : ""),
-    });
-    // Dates in the merged table are real dates, so they sit right like numbers do.
-    G.rows.slice(1, rows.length + 1).forEach((row) => row.cells[2].classList.add("num"));
+  function setKpis(d) {
+    const tiles = document.querySelectorAll(".db-kpi");
+    if (!tiles.length) return;
+    tiles[0].querySelector("b").textContent = money(d.total);
+    tiles[1].querySelector("b").textContent = Math.round(d.records).toLocaleString();
+    tiles[2].querySelector("b").textContent = money(d.total / d.records);
+    tiles[3].querySelector("i").textContent = money(d.top);
   }
-  function reportRows(data, totals) {
-    const rows = [["Monthly Sales Report"], [], ["Customer", "Region", "Amount", "Units", "Amount per Unit"]];
-    data.forEach((d) => rows.push([d[0], d[1], d[2], d[3], d[2] / d[3]]));
-    rows.push([]);
-    rows.push(["Total", null, totals[0], totals[1], null]);
-    return rows;
+  function blend(a, b, t) {
+    return { total: lerp(a.total, b.total, t), records: lerp(a.records, b.records, t), top: lerp(a.top, b.top, t) };
   }
-  function reportGrid(data) {
-    const totals = [data.reduce((s, d) => s + d[2], 0), data.reduce((s, d) => s + d[3], 0)];
-    const rows = reportRows(data, totals);
-    const last = rows.length - 1;
-    buildGrid({
-      widths: REPORT_W,
-      rows,
-      cls: (r, c) => {
-        if (r === 0 && c === 0) return "t";
-        if (r === 2 && c < 5) return "rh";
-        if (r === last && c < 5) return "tot";
-        if (r > 2 && r < last - 1 && c === 4) return "fx dec";
-        return "";
-      },
-    });
+
+  function buildDashboardDom(subtitle) {
+    const db = $("#db"), inner = $("#dbIn");
+    inner.style.transform = "translateY(0)";
+    inner.innerHTML =
+      '<div class="db-title">Sales Extract dashboard</div><div class="db-sub" id="dbSub">' + subtitle + "</div>" +
+      '<div class="db-kpis">' + kpiHTML(JUNE) + "</div>" +
+      '<div class="db-grid">' + CARDS.map((c, i) => '<div class="db-card' + (c.w === DB_W ? " full" : "") + '" data-i="' + i + '"><h5>' + c.title + '</h5><svg width="' + (c.w - 18) + '" height="' + (c.h - 22) + '" viewBox="0 0 ' + (c.w - 18) + " " + (c.h - 22) + '"></svg></div>').join("") + "</div>";
+    db.hidden = false;
   }
 
   // ---------------------------------------------------------------------------
@@ -1684,336 +1605,280 @@ footer p { margin: 0; max-width: 60ch; }
   // ---------------------------------------------------------------------------
   const SCENES = [
     {
-      title: "Clean up data",
+      title: "The mess",
       steps: [
-        "A typical export: stray spaces, a repeated order, shouting capitals, and dates typed four different ways.",
-        "Open MEx Automate from the Home tab.",
-        "Choose Clean up data.",
-        "Click any cell in your table. The whole table is picked up.",
-        "Remove duplicates. Order 4 was in there twice.",
-        "Remove extra spaces, including the ones you can't see.",
-        "Select the names, then choose Title Case.",
-        "Fix dates. Text becomes real dates, all in one format.",
-        "Done. A clean table, and nothing retyped by hand.",
+        "A real export: title rows, group headings, subtotals, a repeated heading, numbers typed five ways, dates in five formats, typos. And that's only the first 28 of 99 rows.",
+        "Open Fix messy data. It scans the whole sheet.",
+        "Every problem is found and flagged by type, down to the last row...",
+        TOTAL_PROBLEMS + " problems in " + ORDERS + " orders, each listed in plain words. Nothing has changed yet.",
       ],
       setup() {
+        $("#db").hidden = true;
         paneOpen(false);
         paneIn.innerHTML = homeView();
-        setTabs(BASE_TABS, "Jan Orders");
-        janGrid(JAN_RAW);
-        setFx("A1", "Order ID");
-        placeCursor(930, 460);
+        setTabs(BASE_TABS, "Sales Extract");
+        buildMess();
+        $("#nameBox").textContent = "A1";
+        $("#fxVal").textContent = "ACME FOODS LTD - SALES EXTRACT, JAN-JUN 2024";
+        beam.style.opacity = "0";
+        placeCursor(1060, 600);
       },
       async run() {
-        say(0); await wait(2800);
-        say(1); await press(q('[data-t="automate"]')); await openPane(); await wait(250);
-        say(2); await press(q('[data-t="tool-clean"]')); await setPane(cleanView());
-
-        const R = G.rows;
-        const dates = [1, 2, 3, 4, 5, 7, 8].map((i) => R[i].cells[1]);
-        const isoDates = ["2024-01-05", "2024-01-06", "2024-01-07", "2024-01-08", "2024-01-09", "2024-01-10", "2024-01-11"];
-        const spaced = [R[1].cells[2], R[5].cells[2]];
-        const caseFix = [[R[2].cells[2], "Beta Trading"], [R[3].cells[2], "Acme Ltd"], [R[3].cells[3], "North"], [R[5].cells[2], "Beta Trading"]];
-        const pSel = () => $("#pSel");
-
-        say(3); await press(R[4].cells[1]);
-        select(4, 1, 4, 1); setFx("B5", "2024-01-08"); pSel().textContent = "Jan Orders, B5"; await wait(500);
-        select(0, 0, 8, 5); pSel().textContent = "Jan Orders, A1:F9"; await wait(1000);
-
-        say(4); await openCard("dup");
-        let b = q('[data-t="dup"]'); await press(b); await busy(b, 550);
-        R[6].el.classList.add("dup"); await wait(650);
-        await collapseRow(6);
-        select(0, 0, 7, 5); pSel().textContent = "Jan Orders, A1:F8";
-        await banner(b.parentNode, "Done", "Removed 1 duplicate row.");
-        await wait(1300);
-
-        say(5); await openCard("trim");
-        b = q('[data-t="trim"]'); await press(b); await busy(b, 450);
-        const dots = stage.querySelectorAll(".ws");
-        await Promise.all(Array.prototype.map.call(dots, (d) => A(d, [{ width: "0.55em", opacity: 0.8 }, { width: "0em", opacity: 0 }], { duration: 420 })));
-        dots.forEach((d) => d.remove());
-        spaced.forEach(flash);
-        await banner(b.parentNode, "Done", "Trimmed 2 cells.");
-        await wait(1300);
-
-        say(6); await openCard("case");
-        await press(G.rows[1].cells[2], 0.3); select(1, 2, 1, 2); pSel().textContent = "Jan Orders, C2";
-        await moveTo(G.rows[7].cells[3], 0.6);
-        select(1, 2, 7, 3); pSel().textContent = "Jan Orders, C2:D8"; await wait(400);
-        b = q('[data-t="case-title"]'); await press(b); await busy(b, 350);
-        for (const [cell, text] of caseFix) { swapCell(cell, text); await wait(110); }
-        await wait(350);
-        await banner(b.parentNode.parentNode, "Done", "Updated 4 cells.");
-        await wait(1300);
-
-        say(7); await openCard("dates");
-        await press(G.rows[3].cells[4]); select(0, 0, 7, 5); pSel().textContent = "Jan Orders, A1:F8"; await wait(450);
-        b = q('[data-t="dates"]'); await press(b); await busy(b, 500);
-        for (let i = 0; i < dates.length; i += 1) { swapCell(dates[i], isoDates[i], { num: true }); await wait(95); }
-        await wait(500);
-        await banner(b.parentNode, "Done", "7 text dates converted to real dates.");
-
-        say(8); hideSel(); await wait(3200);
-      },
-    },
-    {
-      title: "Combine sheets",
-      steps: [
-        "Three months of orders on three sheets, each laid out a little differently.",
-        "Choose Combine sheets and tick the months.",
-        "Columns are lined up by name, even when one sheet says order_id and another says Order ID.",
-        "March calls it Client Name. Match it to Customer.",
-        "Sort by Amount, biggest first, and combine.",
-        "One tidy table on a new sheet. The original sheets are untouched.",
-      ],
-      setup() {
-        paneOpen(true);
-        paneIn.innerHTML = homeView();
-        setTabs(BASE_TABS, "Jan Orders");
-        janGrid(JAN_CLEAN);
-        setFx("A1", "Order ID");
-        placeCursor(760, 470);
-      },
-      async run() {
-        say(0); await wait(900);
-        await press(tab("Feb Orders")); activateTab("Feb Orders"); sheetGrid(FEB_HEAD, FEB, [64, 76, 138, 72, 96, 72]); await wait(1100);
-        await press(tab("Mar Orders")); activateTab("Mar Orders"); sheetGrid(MAR_HEAD, MAR, JAN_W); await wait(1100);
-
-        say(1); await press(q('[data-t="tool-combine"]')); await setPane(combineView(1));
-        for (let i = 0; i < 3; i += 1) {
-          const box = q('[data-t="box-' + i + '"]');
-          await press(box); box.classList.add("on"); await wait(160);
-        }
-        await wait(400); await setPane(combineView(2));
-
-        say(2); await wait(2600);
-
-        say(3);
-        const dd = q('[data-t="dd-client"]'); await press(dd);
-        const menu = document.createElement("div");
-        menu.className = "p-menu";
-        menu.innerHTML = "<div>Same as Order ID</div><div>Same as Order Date</div><div data-t=\"opt-customer\">Same as Customer</div><div>Same as Region</div>";
-        const body = paneIn.querySelector(".p-body");
-        const ddTop = dd.offsetTop + dd.offsetHeight + 2;
-        menu.style.left = "20px";
-        menu.style.top = Math.min(ddTop, 330) + "px";
-        body.appendChild(menu);
-        await A(menu, [{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 180 });
-        const opt = menu.querySelector('[data-t="opt-customer"]');
-        await moveTo(opt); opt.classList.add("hi"); await click(opt);
-        await A(menu, [{ opacity: 1 }, { opacity: 0 }], { duration: 140 }); menu.remove();
-        const client = $("#rowClient");
-        await A(client, [{ maxHeight: "70px", opacity: 1 }, { maxHeight: "0px", opacity: 0 }], { duration: 380 });
-        client.remove();
-        $("#custDot").className = "p-okdot"; $("#custNote").textContent = "";
-        flash($("#rowCustomer"));
-        const line = $("#matchLine"); line.hidden = false;
-        await A(line, [{ opacity: 0 }, { opacity: 1 }], { duration: 260 });
-        await wait(1500);
-
-        say(4); await setPane(combineView(3));
-        const sortDd = q('[data-t="dd-sort"]'); await press(sortDd);
-        sortDd.textContent = "Amount"; flash(sortDd); await wait(250);
-        const sw = q('[data-t="sw-desc"]'); await press(sw); sw.classList.add("on"); $("#swLabel").textContent = "Largest / Z first";
-        await wait(300);
-        const go = q('[data-t="combine"]'); await press(go); await busy(go, 800);
-
-        await addTab("Merged");
-        mergedGrid(MERGED);
-        const dataRows = G.rows.slice(1, MERGED.length + 1);
-        dataRows.forEach((row, i) => A(row.el, [{ opacity: 0, transform: "translateY(-10px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 300, delay: i * 55 }).catch(() => {}));
-        await wait(MERGED.length * 55 + 500);
-
-        // Sort by Amount, largest first: move each row to its new place (FLIP).
-        const order = MERGED_SORTED.map((r) => dataRows[MERGED.indexOf(r)]);
-        const before = new Map(dataRows.map((r) => [r, r.el.offsetTop]));
-        const after0 = G.rows[MERGED.length + 1].el;
-        order.forEach((r) => cellsEl.insertBefore(r.el, after0));
-        G.rows = [G.rows[0]].concat(order, G.rows.slice(MERGED.length + 1));
-        await Promise.all(order.map((r, i) => A(r.el, [{ transform: "translateY(" + (before.get(r) - r.el.offsetTop) + "px)" }, { transform: "translateY(0)" }], { duration: 750, delay: i * 18 })));
-        select(0, 0, MERGED.length, 7);
-        await banner(q("#step3"), "Done", 'Combined 16 rows from 3 sheets into "Merged".');
-
-        say(5); await wait(3400);
-      },
-    },
-    {
-      title: "Make a chart",
-      steps: [
-        "Now turn the combined table into a chart.",
-        "Say what you want in plain words: the sum of Amount for each Region.",
-        "Pick a pie. The title fills itself in.",
-        "Create the chart.",
-        "The totals behind the chart sit right beside it, so every number can be checked.",
-      ],
-      setup() {
-        paneOpen(true);
-        paneIn.innerHTML = homeView();
-        setTabs(BASE_TABS.concat("Merged"), "Merged");
-        mergedGrid(MERGED_SORTED);
-        setFx("A1", "Source");
-        placeCursor(760, 470);
-      },
-      async run() {
-        say(0); await wait(1800);
-        say(1); await press(q('[data-t="tool-chart"]')); await setPane(chartView());
-        const each = q('[data-t="dd-each"]'); await press(each);
-        const menu = document.createElement("div");
-        menu.className = "p-menu";
-        menu.innerHTML = "<div>Source</div><div>Customer</div><div data-t=\"opt-region\">Region</div><div>Channel</div>";
-        menu.style.left = "120px";
-        menu.style.top = each.offsetTop + each.offsetHeight + 6 + "px";
-        each.closest(".p-card").style.position = "relative";
-        each.closest(".p-card").appendChild(menu);
-        await A(menu, [{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 180 });
-        const opt = menu.querySelector('[data-t="opt-region"]');
-        await moveTo(opt); opt.classList.add("hi"); await click(opt);
-        await A(menu, [{ opacity: 1 }, { opacity: 0 }], { duration: 140 }); menu.remove();
-        each.textContent = "Region"; flash(each);
-        const tt = $("#titleText");
-        tt.textContent = "Sum of Amount by Region"; flash($("#titleInput"));
-        await wait(1100);
+        say(0); await wait(4000);
+        say(1);
+        await press(q('[data-t="automate"]')); await openPane(); await wait(200);
+        await press(q('[data-t="tool-tidy"]')); await setPane(tidyView());
 
         say(2);
-        const pie = q('[data-t="shape-pie"]'); await press(pie);
-        paneIn.querySelectorAll(".p-shape").forEach((s) => s.classList.toggle("on", s === pie));
-        await wait(800);
+        const counts = Object.fromEntries(PROBLEMS.map((p) => [p.id, 0]));
+        const show = () => {
+          let total = 0;
+          PROBLEMS.forEach((p) => {
+            $("#cnt-" + p.id).textContent = counts[p.id];
+            if (counts[p.id] > 0) $("#find-" + p.id).style.opacity = "1";
+            total += counts[p.id];
+          });
+          $("#probCount").textContent = total;
+        };
+        const bodyH = MESS.length * ROW_H;
+        beam.style.opacity = "1";
+        let next = 0;
+        await tween(3400, (p) => {
+          const y = p * (bodyH + 40) - 44;
+          beam.style.top = y + "px";
+          while (next < MESS.length && (next + 1) * ROW_H <= y + 44) {
+            flagRow(G.rows[next]).forEach((id) => { counts[id] += 1; });
+            next += 1;
+          }
+          show();
+        }, (p) => p);
+        await A(beam, [{ opacity: 1 }, { opacity: 0 }], { duration: 250 });
+
+        // The rest of the sheet, below the visible rows.
+        $("#probText").textContent = "Checking rows 29 to 99...";
+        const start = Object.assign({}, counts);
+        await tween(1600, (p) => {
+          PROBLEMS.forEach((pr) => { counts[pr.id] = Math.round(lerp(start[pr.id], FULL[pr.id], p)); });
+          show();
+        });
 
         say(3);
-        const go = q('[data-t="create"]'); await press(go); await busy(go, 700);
-        await addTab("Chart");
-        buildGrid({
-          widths: [86, 118],
-          rows: [["Region", "Sum of Amount"]].concat(REGION_TOTALS.map((r) => [r[0], 0])),
-          cls: (r) => (r === 0 ? "th" : ""),
-          rowCls: (r, d) => (r > 0 && d ? "band" : ""),
-        });
-        setFx("B2", "7130");
-        await Promise.all(REGION_TOTALS.map((r, i) => {
-          const cell = G.rows[i + 1].cells[1];
-          return tween(900, (p) => { cell.innerHTML = '<span class="v">' + fmtInt(Math.round(r[1] * p)) + "</span>"; });
-        }));
-        await drawPie();
-        await banner(go.parentNode, "Done", 'Added a pie chart to "Chart".');
-
-        say(4); await wait(3600);
-      },
-    },
-    {
-      title: "Update a report",
-      steps: [
-        "Every month, new orders land in your data sheet.",
-        "Your finished report still shows last month.",
-        "Open Update a report and click your saved report.",
-        "Rows are replaced. The title, the formula column and the totals stay exactly where they were.",
-      ],
-      setup() {
-        paneOpen(true);
-        paneIn.innerHTML = homeView();
-        setTabs(BASE_TABS.concat("Merged", "Chart"), "New Data");
-        sheetGrid(NEW_HEAD, [], JAN_W);
-        setFx("A1", "Order ID");
-        placeCursor(760, 470);
-      },
-      async run() {
-        say(0); await wait(700);
-        await press(G.rows[1].cells[0]); select(1, 0, 1, 0);
-        await keycap(["Ctrl", "V"]); await wait(250);
-        APRIL.forEach((d, i) => {
-          const row = G.rows[i + 1];
-          d.forEach((v, c) => { row.cells[c].innerHTML = cellHTML(v); row.cells[c].classList.toggle("num", typeof v === "number" || c === 1); });
-          row.cells.forEach(flash);
-        });
-        select(1, 0, 4, 5);
-        await wait(1700);
-
-        say(1);
-        await press(tab("Sales Report")); activateTab("Sales Report"); reportGrid(REPORT_OLD);
-        await press(G.rows[3].cells[4]); select(3, 4, 3, 4); setFx("E4", '=IF(D4=0,"",C4/D4)');
-        G.rows.slice(3, 6).forEach((r) => r.cells[4].style.setProperty("--fxo", "1"));
-        await wait(2000);
-
-        say(2); await press(q('[data-t="tool-report"]')); await setPane(reportView());
-        const go = q('[data-t="update"]'); await press(go); await busy(go, 800);
-        hideSel();
-
-        say(3);
-        // Replace the three old rows in place, then add the fourth.
-        for (let i = 0; i < 3; i += 1) {
-          const row = G.rows[3 + i], d = REPORT_NEW[i];
-          for (let c = 0; c < 4; c += 1) swapCell(row.cells[c], d[c]);
-          swapCell(row.cells[4], d[2] / d[3], { cls: "dec" });
-          await wait(160);
-        }
-        const d4 = REPORT_NEW[3];
-        const fresh = blankRow();
-        fresh.cells[4].classList.add("fx", "num");
-        fresh.cells[4].style.setProperty("--fxo", "1");
-        [0, 1, 2, 3].forEach((c) => { fresh.cells[c].innerHTML = cellHTML(d4[c]); if (typeof d4[c] === "number") fresh.cells[c].classList.add("num"); });
-        fresh.cells[4].innerHTML = cellHTML(d4[2] / d4[3], "dec");
-        cellsEl.insertBefore(fresh.el, G.rows[6].el);
-        G.rows.splice(6, 0, fresh);
-        G.rows.pop().el.remove();
-        fresh.cells.forEach(flash);
-        await A(fresh.el, [{ height: "0px" }, { height: ROW_H + "px" }], { duration: 420 });
-
-        const totalRow = G.rows[8];
-        const amountCell = totalRow.cells[2], unitCell = totalRow.cells[3];
-        flash(amountCell); flash(unitCell);
-        await tween(1000, (p) => {
-          amountCell.innerHTML = '<span class="v">' + fmtInt(Math.round(3710 + (5930 - 3710) * p)) + "</span>";
-          unitCell.innerHTML = '<span class="v">' + Math.round(9 + (14 - 9) * p) + "</span>";
-        });
-        select(8, 2, 8, 2); setFx("C9", "=SUM(C4:C7)");
-        await banner($("#savedCard"), "Done", 'Updated 4 rows in "Sales Report".');
+        $("#probText").textContent = "problems in " + ORDERS + " orders";
+        const btn = $("#fixBtn");
+        btn.textContent = "Fix " + TOTAL_PROBLEMS + " problems";
+        await A(btn, [{ opacity: 0.45 }, { opacity: 1 }], { duration: 300 });
         await wait(3800);
       },
     },
-  ];
+    {
+      title: "Fixed in one click",
+      steps: [
+        "One click: Fix " + TOTAL_PROBLEMS + " problems.",
+        "Titles, subtotals, blank rows, the repeated heading and the duplicate go.",
+        "Group headings become a proper Region column.",
+        "Every number and date becomes real, and every spelling agrees.",
+        "A clean, typed table of " + ORDERS + " orders on a new sheet. The original export is untouched.",
+      ],
+      setup() {
+        $("#db").hidden = true;
+        paneOpen(true);
+        paneIn.innerHTML = tidyView();
+        setTabs(BASE_TABS, "Sales Extract");
+        buildMess();
+        flagAll();
+        $("#probCount").textContent = TOTAL_PROBLEMS;
+        $("#probText").textContent = "problems in " + ORDERS + " orders";
+        PROBLEMS.forEach((p) => { $("#cnt-" + p.id).textContent = FULL[p.id]; $("#find-" + p.id).style.opacity = "1"; });
+        const btn = $("#fixBtn"); btn.textContent = "Fix " + TOTAL_PROBLEMS + " problems"; btn.style.opacity = "1";
+        beam.style.opacity = "0";
+        placeCursor(760, 600);
+      },
+      async run() {
+        say(0); await wait(700);
+        const btn = $("#fixBtn"); await press(btn); await busy(btn, 500);
+        const tick = (id) => {
+          const row = $("#find-" + id);
+          row.querySelector(".sw").outerHTML = '<span class="tick">✓</span>';
+          flash(row);
+        };
 
-  // The pie itself: slices sweep in one after another, with 2px surface gaps and
-  // a direct label per slice so identity never rests on colour alone.
-  async function drawPie() {
-    const box = document.createElement("div");
-    box.className = "x-chart";
-    box.style.left = "240px";
-    box.style.top = "14px";
-    box.style.width = "420px";
-    const total = REGION_TOTALS.reduce((s, r) => s + r[1], 0);
-    const cxp = 150, cyp = 138, R = 96, r2 = R / 2, C = 2 * Math.PI * r2;
-    const colors = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)"];
-    let svg = '<svg width="396" height="270" viewBox="0 0 396 270" role="img" aria-label="Pie chart of Sum of Amount by Region">';
-    let angle = 0;
-    const slices = [], labels = [], gaps = [];
-    REGION_TOTALS.forEach((r, i) => {
-      const frac = r[1] / total;
-      const start = angle;
-      angle += frac * 360;
-      slices.push('<circle class="sl" cx="' + cxp + '" cy="' + cyp + '" r="' + r2 + '" fill="none" stroke="' + colors[i] + '" stroke-width="' + R + '" stroke-dasharray="0 ' + C + '" data-len="' + (frac * C) + '" transform="rotate(' + (start - 90) + " " + cxp + " " + cyp + ')"><title>' + r[0] + ": " + fmtInt(r[1]) + "</title></circle>");
-      const rad = (start - 90) * Math.PI / 180;
-      gaps.push('<line class="gp" x1="' + cxp + '" y1="' + cyp + '" x2="' + (cxp + Math.cos(rad) * (R + 1)) + '" y2="' + (cyp + Math.sin(rad) * (R + 1)) + '" stroke="var(--surface)" stroke-width="2" opacity="0"/>');
-      const mid = (start + frac * 180 - 90) * Math.PI / 180;
-      const lx = cxp + Math.cos(mid) * (R + 16), ly = cyp + Math.sin(mid) * (R + 16);
-      const anchor = Math.cos(mid) >= 0 ? "start" : "end";
-      labels.push('<text class="lb b" opacity="0" x="' + lx + '" y="' + (ly - 2) + '" text-anchor="' + anchor + '">' + r[0] + '</text><text class="lb" opacity="0" x="' + lx + '" y="' + (ly + 12) + '" text-anchor="' + anchor + '">' + Math.round(frac * 100) + "%</text>");
-    });
-    svg += slices.join("") + gaps.join("") + labels.join("");
-    // Legend
-    REGION_TOTALS.forEach((r, i) => {
-      svg += '<g class="lg" opacity="0"><rect x="300" y="' + (92 + i * 22) + '" width="11" height="11" rx="2" fill="' + colors[i] + '"/><text x="318" y="' + (102 + i * 22) + '">' + r[0] + "</text></g>";
-    });
-    svg += "</svg>";
-    box.innerHTML = "<h4>Sum of Amount by Region</h4>" + svg;
-    cellWrap.appendChild(box);
-    await A(box, [{ opacity: 0, transform: "scale(.96)" }, { opacity: 1, transform: "scale(1)" }], { duration: 320 });
-    for (const s of box.querySelectorAll(".sl")) {
-      const len = +s.dataset.len;
-      await A(s, [{ strokeDasharray: "0 " + C }, { strokeDasharray: len + " " + C }], { duration: 420, easing: "cubic-bezier(.4,0,.2,1)" });
-    }
-    box.querySelectorAll(".gp").forEach((g) => A(g, [{ opacity: 0 }, { opacity: 1 }], { duration: 200 }).catch(() => {}));
-    await Promise.all(Array.prototype.map.call(box.querySelectorAll(".lb, .lg"), (t, i) => A(t, [{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: i * 40 })));
-  }
+        say(1);
+        const junk = G.rows.filter((r) => ["title", "blank", "total", "repeat", "dup"].includes(r.spec.kind));
+        await collapse(junk);
+        ["misc", "total", "dup"].forEach(tick);
+        await wait(400);
+
+        say(2);
+        // Remember each data row's region before the group rows disappear.
+        let region = null;
+        G.rows.forEach((r) => { if (r.spec.kind === "group") region = r.spec.region; else if (r.spec.kind === "data") r.region = region; });
+        await collapse(G.rows.filter((r) => r.spec.kind === "group"));
+        curWidths = [REGION_W].concat(WIDTHS);
+        setColHead(curWidths);
+        const inserts = G.rows.map((r) => {
+          const cell = document.createElement("div");
+          cell.className = "x-c" + (r.spec.kind === "head" ? " h" : "");
+          cell.style.width = "0px";
+          cell.innerHTML = r.spec.kind === "head" ? '<span class="v">Region</span>' : r.region ? '<span class="v">' + r.region + "</span>" : "";
+          r.el.insertBefore(cell, r.el.firstChild);
+          r.cells.unshift(cell);
+          return cell;
+        });
+        await Promise.all(inserts.map((cell, i) => A(cell, [{ width: "0px" }, { width: REGION_W + "px" }], { duration: 520, delay: i * 25 })));
+        inserts.forEach((cell) => { if (cell.textContent) flash(cell); });
+        tick("group");
+        await wait(500);
+
+        say(3);
+        const dataRows = G.rows.filter((r) => r.spec.kind === "data");
+        for (let i = 0; i < dataRows.length; i += 1) {
+          const r = dataRows[i], clean = CLEAN[i];
+          const jobs = [];
+          [1, 2, 4, 5, 6].forEach((col) => {
+            const raw = r.spec.cells[col] == null ? "" : String(r.spec.cells[col]);
+            if (raw !== clean[col] || r.spec.flags[col]) {
+              jobs.push(swapCell(r.cells[col + 1], clean[col] === "" ? null : clean[col], col === 1 || col === 5 || col === 6));
+            }
+          });
+          soft(Promise.all(jobs));
+          await wait(130);
+        }
+        await wait(500);
+        ["num", "date", "spell", "space"].forEach(tick);
+        unflagAll();
+
+        // The result is a real Excel table: styled heading, banded rows, and
+        // the rest of the 78 orders below.
+        const headRow = G.rows.find((r) => r.spec.kind === "head");
+        headRow.cells.slice(0, 8).forEach((c) => c.classList.add("th"));
+        dataRows.forEach((r) => r.el.classList.add("band"));
+        G.rows.filter((r) => r.spec.kind === "filler").forEach((r) => { r.el.remove(); G.rows.splice(G.rows.indexOf(r), 1); });
+        const more = MORE.slice(0, ROWS - G.rows.length).map((values) => {
+          const r = makeRow(values, curWidths, { rowClass: "band", cls: (c) => (c === 2 || c === 6 || c === 7 ? "num" : "") });
+          r.spec = { kind: "data" };
+          r.el.style.opacity = "0";
+          cellsEl.appendChild(r.el);
+          G.rows.push(r);
+          return r;
+        });
+        await Promise.all(more.map((r, i) => A(r.el, [{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 260, delay: i * 45 })));
+        await addTab("Sales Extract (clean)");
+
+        say(4);
+        $("#probCount").textContent = "0";
+        $("#probCount").classList.add("ok");
+        $("#probText").textContent = "problems left";
+        await banner($("#fixCard"), "Done", 'Clean table on "Sales Extract (clean)": ' + ORDERS + " rows, 8 columns. Your original is unchanged.");
+        await wait(3600);
+      },
+    },
+    {
+      title: "Dashboard in seconds",
+      steps: [
+        "Now a dashboard, straight from the messy export. No clean-up needed first.",
+        "MEx reads the columns and suggests eight charts. Keep them all, or untick any.",
+        "Build.",
+        "Headline numbers across the top, eight charts on a tidy grid, colours matched across charts.",
+      ],
+      setup() {
+        $("#db").hidden = true;
+        paneOpen(true);
+        paneIn.innerHTML = homeView();
+        setTabs(BASE_TABS.concat("Sales Extract (clean)"), "Sales Extract");
+        buildMess();
+        beam.style.opacity = "0";
+        placeCursor(760, 600);
+      },
+      async run() {
+        say(0); await wait(1200);
+        await press(q('[data-t="tool-dash"]')); await setPane(dashView());
+
+        say(1);
+        const sugs = paneIn.querySelectorAll(".p-sug");
+        for (const s of sugs) { await A(s, [{ opacity: 0, transform: "translateX(10px)" }, { opacity: 1, transform: "translateX(0)" }], { duration: 220 }); }
+        await wait(1600);
+
+        say(2);
+        const go = q('[data-t="build"]'); await press(go);
+        const list = $("#sugList");
+        await A(list, [{ opacity: 1, maxHeight: "260px" }, { opacity: 0, maxHeight: "0px" }], { duration: 300 });
+        list.outerHTML = '<div class="p-hint">8 charts and 4 headline numbers chosen.</div>';
+        await busy(go, 600);
+        await addTab("Sales Extract dashboard");
+        buildDashboardDom('From "Sales Extract" · 78 records · updated 1 Jul 2024');
+        await A($("#db"), [{ opacity: 0 }, { opacity: 1 }], { duration: 250 });
+
+        say(3);
+        const tiles = document.querySelectorAll(".db-kpi");
+        tiles.forEach((t, i) => soft(A(t, [{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 300, delay: i * 70 })));
+        soft(tween(1200, (p) => setKpis({ total: JUNE.total * p, records: Math.max(1, JUNE.records * p), top: JUNE.top * p })));
+        const cards = document.querySelectorAll(".db-card");
+        cards.forEach((c) => { c.style.opacity = "0"; });
+        drawDashboard(JUNE, null, 1, 0);
+        for (let i = 0; i < cards.length; i += 1) {
+          soft(A(cards[i], [{ opacity: 0, transform: "scale(.96)" }, { opacity: 1, transform: "scale(1)" }], { duration: 300 }));
+          soft(tween(900, (p) => drawDashboard(JUNE, null, 1, p, i)));
+          await wait(i === 0 ? 420 : 280);
+        }
+        await wait(1000);
+        // Pan down to show the charts below the fold, like scrolling the sheet.
+        const inner = $("#dbIn");
+        const overflow = Math.max(0, inner.scrollHeight - $("#db").clientHeight);
+        await A(inner, [{ transform: "translateY(0)" }, { transform: "translateY(-" + overflow + "px)" }], { duration: 1600 });
+        await banner($("#buildCard"), "Done", 'Built "Sales Extract dashboard" with 8 charts and 4 headline numbers.');
+        await wait(2400);
+        await A(inner, [{ transform: "translateY(-" + overflow + "px)" }, { transform: "translateY(0)" }], { duration: 1200 });
+        await wait(1200);
+      },
+    },
+    {
+      title: "Next month",
+      steps: [
+        "July's export arrives. Paste it over the old one, in the same sheet.",
+        "Open your saved dashboard and click Refresh.",
+        "Every number and chart updates. Same layout, new month.",
+      ],
+      setup() {
+        paneOpen(true);
+        paneIn.innerHTML = homeView();
+        setTabs(BASE_TABS.concat("Sales Extract (clean)", "Sales Extract dashboard"), "Sales Extract");
+        buildMess();
+        $("#db").hidden = true;
+        beam.style.opacity = "0";
+        placeCursor(760, 600);
+      },
+      async run() {
+        say(0); await wait(600);
+        await press(G.rows[0].cells[0], 0.3);
+        $("#nameBox").textContent = "A1";
+        await keycap(["Ctrl", "V"]);
+        for (let i = 0; i < MESS.length; i += 3) {
+          G.rows.slice(i, i + 3).forEach((r) => r.cells.slice(0, 7).forEach(flash));
+          await wait(45);
+        }
+        await wait(1400);
+
+        say(1);
+        await press(tab("Sales Extract dashboard")); activateTab("Sales Extract dashboard");
+        buildDashboardDom('From "Sales Extract" · 78 records · updated 1 Jul 2024');
+        drawDashboard(JUNE, null, 1, 1);
+        setKpis(JUNE);
+        await press(q('[data-t="tool-dash"]')); await setPane(savedView());
+        const go = q('[data-t="refresh"]'); await press(go); await busy(go, 700);
+
+        say(2);
+        $("#dbSub").textContent = 'From "Sales Extract" · 92 records · updated 1 Aug 2024';
+        flash($("#dbSub"));
+        document.querySelectorAll(".db-kpi").forEach(flash);
+        await tween(1800, (t) => {
+          drawDashboard(JULY, JUNE, t, 1);
+          setKpis(blend(JUNE, JULY, t));
+        });
+        await banner($("#savedCard"), "Done", 'Built "Sales Extract dashboard" with 8 charts and 4 headline numbers.');
+        await wait(4200);
+      },
+    },
+  ];
 
   // ---------------------------------------------------------------------------
   // Chapters, captions and playback
@@ -2030,7 +1895,6 @@ footer p { margin: 0; max-width: 60ch; }
     captionText.textContent = scene.steps[k];
     chapterBtns.forEach((b, i) => b.style.setProperty("--p", i === current ? (k + 1) / scene.steps.length : 0));
   }
-
   function setPlaying(v) {
     playing = v;
     stageAnimations().forEach((a) => { if (v) { if (a.playState === "paused") a.play(); } else if (a.playState === "running") a.pause(); });
@@ -2039,6 +1903,9 @@ footer p { margin: 0; max-width: 60ch; }
   }
 
   let userPaused = false;
+  let started = false;
+  let onScreen = true;
+
   async function play(i) {
     runId += 1;
     const id = runId;
@@ -2059,15 +1926,16 @@ footer p { margin: 0; max-width: 60ch; }
   }
 
   chapterBtns.forEach((b) => b.addEventListener("click", () => {
+    started = true;
     userPaused = false;
     setPlaying(true);
     play(+b.dataset.i);
   }));
-
   playBtn.addEventListener("click", () => {
     if (speed < 1) {
       // Reduced-motion visitors see finished states; pressing play is an explicit request to watch.
       speed = 1;
+      started = true;
       userPaused = false;
       setPlaying(true);
       play(current);
@@ -2077,8 +1945,7 @@ footer p { margin: 0; max-width: 60ch; }
     setPlaying(!playing);
   });
 
-  // Pause when the demo is off screen or the tab is hidden; resume where it left off.
-  let onScreen = true;
+  // Pause when the demo is off screen or the tab is hidden.
   if ("IntersectionObserver" in window) {
     new IntersectionObserver((entries) => {
       onScreen = entries[0].isIntersecting;
@@ -2091,15 +1958,14 @@ footer p { margin: 0; max-width: 60ch; }
     else if (!document.hidden && onScreen && !userPaused && started) setPlaying(true);
   });
 
-  // At rest the stage shows the messy "before" table, so the first frame already
-  // tells the story. Motion starts shortly after.
-  let started = false;
+  // At rest the stage shows the messy export, so the first frame already tells
+  // the story. Motion starts shortly after.
   SCENES[0].setup();
   say(0);
   playBtn.innerHTML = IC.play;
+  chapterBtns.forEach((b, j) => b.setAttribute("aria-current", j === 0 ? "true" : "false"));
   if (reduceMotion) {
     speed = 0.001;
-    chapterBtns.forEach((b, j) => b.setAttribute("aria-current", j === 0 ? "true" : "false"));
     playBtn.setAttribute("aria-label", "Play the walkthrough");
   } else {
     setTimeout(() => {
@@ -2107,10 +1973,6 @@ footer p { margin: 0; max-width: 60ch; }
       setPlaying(onScreen);
       play(0);
     }, 900);
-  }
-  // In reduced-motion mode, chapter buttons jump straight to each finished state.
-  if (reduceMotion) {
-    chapterBtns.forEach((b) => b.addEventListener("click", () => { started = true; }));
   }
 })();
 </script>
