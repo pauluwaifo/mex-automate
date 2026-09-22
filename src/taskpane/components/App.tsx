@@ -1,38 +1,71 @@
 import * as React from "react";
-import { Button, makeStyles, Text, tokens } from "@fluentui/react-components";
+import { Button, makeStyles, mergeClasses, Text, tokens } from "@fluentui/react-components";
 import {
   ArrowLeft20Regular,
   ArrowSync24Regular,
+  Board24Regular,
   Broom24Regular,
   ChevronRight20Regular,
   DataPie24Regular,
   MathFormula24Regular,
+  TableSparkle24Regular,
   TableStackBelow24Regular,
 } from "@fluentui/react-icons";
 
 import ChartPanel from "./ChartPanel";
 import CleanPanel from "./CleanPanel";
+import DashboardPanel from "./DashboardPanel";
 import FormulaPanel from "./FormulaPanel";
 import MergePanel from "./MergePanel";
 import ReportPanel from "./ReportPanel";
+import TidyPanel from "./TidyPanel";
 import { Tip } from "./ui";
 
-type ToolId = "clean" | "merge" | "charts" | "formulas" | "reports";
+export type ToolId = "tidy" | "dashboard" | "clean" | "merge" | "charts" | "formulas" | "reports";
+
+/** Lets one tool hand the user on to another, e.g. "Build a dashboard from it". */
+export interface ToolParams {
+  /** A data source key such as "sheet:Sales (clean)". */
+  source?: string;
+}
+
+export interface ToolProps {
+  navigate: (tool: ToolId, params?: ToolParams) => void;
+  params?: ToolParams;
+}
 
 interface Tool {
   id: ToolId;
   title: string;
   description: string;
   icon: React.ReactElement;
-  panel: React.FC;
+  panel: React.FC<ToolProps>;
+  /** Shown large at the top of the home screen. */
+  featured?: boolean;
 }
 
 /** The home screen, in the order most people reach for them. */
 const TOOLS: Tool[] = [
   {
+    id: "tidy",
+    title: "Fix messy data",
+    description: "Titles, totals, numbers stored as text, mixed dates, typos: found and fixed in one click.",
+    icon: <TableSparkle24Regular />,
+    panel: TidyPanel,
+    featured: true,
+  },
+  {
+    id: "dashboard",
+    title: "Build a dashboard",
+    description: "Up to 8 charts and headline numbers, chosen and laid out for you.",
+    icon: <Board24Regular />,
+    panel: DashboardPanel,
+    featured: true,
+  },
+  {
     id: "clean",
-    title: "Clean up data",
-    description: "Remove duplicates and extra spaces, fix dates and capital letters.",
+    title: "Quick clean-ups",
+    description: "One fix at a time: duplicates, spaces, dates, capital letters.",
     icon: <Broom24Regular />,
     panel: CleanPanel,
   },
@@ -167,18 +200,68 @@ const useStyles = makeStyles({
     flexShrink: 0,
     color: tokens.colorNeutralForeground3,
   },
+  featured: {
+    padding: "16px 14px",
+    border: `1px solid ${tokens.colorBrandStroke2}`,
+  },
+  featuredIcon: {
+    width: "44px",
+    height: "44px",
+    backgroundColor: tokens.colorBrandBackground,
+    color: tokens.colorNeutralForegroundOnBrand,
+  },
+  featuredTitle: {
+    fontSize: tokens.fontSizeBase400,
+  },
+  sectionLabel: {
+    display: "block",
+    margin: "4px 2px 8px",
+    fontSize: tokens.fontSizeBase100,
+    fontWeight: tokens.fontWeightSemibold,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    color: tokens.colorNeutralForeground3,
+  },
 });
 
 const App: React.FC = () => {
   const styles = useStyles();
   const [toolId, setToolId] = React.useState<ToolId | null>(null);
+  const [params, setParams] = React.useState<ToolParams | undefined>(undefined);
+  // Bumped on every navigation so a tool reopened with new params starts fresh.
+  const [visit, setVisit] = React.useState(0);
   const tool = TOOLS.find((item) => item.id === toolId) ?? null;
   const bodyRef = React.useRef<HTMLDivElement | null>(null);
+
+  const navigate = React.useCallback((next: ToolId | null, nextParams?: ToolParams) => {
+    setToolId(next);
+    setParams(nextParams);
+    setVisit((count) => count + 1);
+  }, []);
 
   // Each tool starts at the top, not wherever the previous one was scrolled to.
   React.useEffect(() => {
     bodyRef.current?.scrollTo?.({ top: 0 });
-  }, [toolId]);
+  }, [visit]);
+
+  const featured = TOOLS.filter((item) => item.featured);
+  const others = TOOLS.filter((item) => !item.featured);
+
+  const toolButton = (item: Tool) => (
+    <button
+      key={item.id}
+      type="button"
+      className={mergeClasses(styles.toolButton, item.featured && styles.featured)}
+      onClick={() => navigate(item.id)}
+    >
+      <span className={mergeClasses(styles.toolIcon, item.featured && styles.featuredIcon)}>{item.icon}</span>
+      <span className={styles.toolText}>
+        <span className={mergeClasses(styles.toolTitle, item.featured && styles.featuredTitle)}>{item.title}</span>
+        <span className={styles.toolDescription}>{item.description}</span>
+      </span>
+      <ChevronRight20Regular className={styles.chevron} />
+    </button>
+  );
 
   return (
     <div className={styles.root}>
@@ -190,7 +273,7 @@ const App: React.FC = () => {
               icon={<ArrowLeft20Regular />}
               aria-label="Back to all tools"
               title="Back to all tools"
-              onClick={() => setToolId(null)}
+              onClick={() => navigate(null)}
             />
             <span className={styles.headerIcon}>{tool.icon}</span>
             <Text className={styles.headerTitle}>{tool.title}</Text>
@@ -203,30 +286,21 @@ const App: React.FC = () => {
       <main className={styles.body} ref={bodyRef}>
         {tool ? (
           // Keyed so each visit starts fresh and re-reads the workbook.
-          <tool.panel key={tool.id} />
+          <tool.panel key={`${tool.id}-${visit}`} navigate={navigate} params={params} />
         ) : (
           <>
             <div className={styles.intro}>
               <Text className={styles.greeting}>What would you like to do?</Text>
-              <Text className={styles.subtle}>Pick a tool. You can always come back here.</Text>
+              <Text className={styles.subtle}>Start with a messy sheet: fix it, then turn it into a dashboard.</Text>
             </div>
 
-            <nav className={styles.toolList} aria-label="Tools">
-              {TOOLS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={styles.toolButton}
-                  onClick={() => setToolId(item.id)}
-                >
-                  <span className={styles.toolIcon}>{item.icon}</span>
-                  <span className={styles.toolText}>
-                    <span className={styles.toolTitle}>{item.title}</span>
-                    <span className={styles.toolDescription}>{item.description}</span>
-                  </span>
-                  <ChevronRight20Regular className={styles.chevron} />
-                </button>
-              ))}
+            <nav className={styles.toolList} aria-label="Main tools">
+              {featured.map(toolButton)}
+            </nav>
+
+            <Text className={styles.sectionLabel}>More tools</Text>
+            <nav className={styles.toolList} aria-label="More tools">
+              {others.map(toolButton)}
             </nav>
 
             <Tip>
