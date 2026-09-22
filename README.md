@@ -247,3 +247,20 @@ submission otherwise:
 ## Licence
 
 Not yet chosen — add a `LICENSE` file before publishing.
+
+---
+
+## Landing page
+
+The product website is a single self-contained file, [docs/index.html](docs/index.html), with an
+animated walkthrough of the add-in. It has no build step and no dependencies beyond Google Fonts.
+
+**Host it on GitHub Pages:** push this repo to GitHub, then go to **Settings → Pages**, set
+**Source** to *Deploy from a branch*, and pick branch `main`, folder `/docs`. The site appears at
+`https://<your-username>.github.io/<repo-name>/` within a minute or two.
+
+**Before launch:** the "Get it free" buttons scroll to the install steps until the AppSource
+listing exists. When it does, set `STORE_URL` near the top of the page's `<script>` to the listing
+URL; every button uses it.
+
+To preview locally, open `docs/index.html` in a browser.
