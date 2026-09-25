@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Button, makeStyles, mergeClasses, Text, tokens } from "@fluentui/react-components";
 import {
+  Apps20Regular,
   ArrowLeft20Regular,
   ArrowSync24Regular,
   Board24Regular,
@@ -12,7 +13,10 @@ import {
   TableStackBelow24Regular,
 } from "@fluentui/react-icons";
 
+import type { ToolName } from "../features/commands";
+import { DISPLAY_FONT } from "../theme";
 import ChartPanel from "./ChartPanel";
+import ChatPanel from "./ChatPanel";
 import CleanPanel from "./CleanPanel";
 import DashboardPanel from "./DashboardPanel";
 import FormulaPanel from "./FormulaPanel";
@@ -121,8 +125,30 @@ const useStyles = makeStyles({
     color: tokens.colorBrandForeground1,
   },
   headerTitle: {
+    fontFamily: DISPLAY_FONT,
     fontSize: tokens.fontSizeBase400,
-    fontWeight: tokens.fontWeightSemibold,
+    fontWeight: 700,
+    letterSpacing: "-0.01em",
+  },
+  headerAction: {
+    marginLeft: "auto",
+  },
+  logo: {
+    width: "24px",
+    height: "24px",
+    borderRadius: tokens.borderRadiusMedium,
+    border: `2px solid ${tokens.colorNeutralForeground1}`,
+    display: "grid",
+    placeItems: "center",
+  },
+  logoMark: {
+    width: "8px",
+    height: "8px",
+    backgroundColor: tokens.colorBrandBackground,
+  },
+  chatWrap: {
+    flexGrow: 1,
+    minHeight: 0,
   },
   body: {
     flexGrow: 1,
@@ -224,18 +250,40 @@ const useStyles = makeStyles({
   },
 });
 
+type View = "chat" | "tools" | ToolId;
+
+/** Tool screens the assistant can open by name. */
+const TOOL_FOR: Record<ToolName, View> = {
+  home: "tools",
+  formulas: "formulas",
+  reports: "reports",
+  merge: "merge",
+  charts: "charts",
+  clean: "clean",
+};
+
 const App: React.FC = () => {
   const styles = useStyles();
-  const [toolId, setToolId] = React.useState<ToolId | null>(null);
+  // The chat is home; the tool screens are one tap away for anything with lots of choices.
+  const [view, setView] = React.useState<View>("chat");
+  const [cameFromChat, setCameFromChat] = React.useState(false);
   const [params, setParams] = React.useState<ToolParams | undefined>(undefined);
   // Bumped on every navigation so a tool reopened with new params starts fresh.
   const [visit, setVisit] = React.useState(0);
-  const tool = TOOLS.find((item) => item.id === toolId) ?? null;
+  const tool = TOOLS.find((item) => item.id === view) ?? null;
   const bodyRef = React.useRef<HTMLDivElement | null>(null);
 
   const navigate = React.useCallback((next: ToolId | null, nextParams?: ToolParams) => {
-    setToolId(next);
+    setView(next ?? "tools");
     setParams(nextParams);
+    setCameFromChat(false);
+    setVisit((count) => count + 1);
+  }, []);
+
+  const openFromChat = React.useCallback((name: ToolName) => {
+    setView(TOOL_FOR[name]);
+    setParams(undefined);
+    setCameFromChat(true);
     setVisit((count) => count + 1);
   }, []);
 
@@ -246,6 +294,10 @@ const App: React.FC = () => {
 
   const featured = TOOLS.filter((item) => item.featured);
   const others = TOOLS.filter((item) => !item.featured);
+  const back = () => {
+    if (view === "tools" || cameFromChat) setView("chat");
+    else setView("tools");
+  };
 
   const toolButton = (item: Tool) => (
     <button
@@ -266,50 +318,72 @@ const App: React.FC = () => {
   return (
     <div className={styles.root}>
       <header className={styles.header}>
-        {tool ? (
+        {view === "chat" ? (
+          <>
+            <span className={styles.logo} aria-hidden="true">
+              <span className={styles.logoMark} />
+            </span>
+            <Text className={styles.headerTitle}>MEx Automate</Text>
+            <Button
+              className={styles.headerAction}
+              appearance="subtle"
+              icon={<Apps20Regular />}
+              onClick={() => setView("tools")}
+            >
+              All tools
+            </Button>
+          </>
+        ) : (
           <>
             <Button
               appearance="subtle"
               icon={<ArrowLeft20Regular />}
-              aria-label="Back to all tools"
-              title="Back to all tools"
-              onClick={() => navigate(null)}
+              aria-label={view === "tools" || cameFromChat ? "Back to the chat" : "Back to all tools"}
+              title={view === "tools" || cameFromChat ? "Back to the chat" : "Back to all tools"}
+              onClick={back}
             />
-            <span className={styles.headerIcon}>{tool.icon}</span>
-            <Text className={styles.headerTitle}>{tool.title}</Text>
+            {tool ? <span className={styles.headerIcon}>{tool.icon}</span> : null}
+            <Text className={styles.headerTitle}>{tool ? tool.title : "All tools"}</Text>
           </>
-        ) : (
-          <Text className={styles.headerTitle}>MEx Automate</Text>
         )}
       </header>
 
-      <main className={styles.body} ref={bodyRef}>
-        {tool ? (
-          // Keyed so each visit starts fresh and re-reads the workbook.
-          <tool.panel key={`${tool.id}-${visit}`} navigate={navigate} params={params} />
-        ) : (
-          <>
-            <div className={styles.intro}>
-              <Text className={styles.greeting}>What would you like to do?</Text>
-              <Text className={styles.subtle}>Start with a messy sheet: fix it, then turn it into a dashboard.</Text>
-            </div>
+      {/* The chat stays mounted while a tool is open, so the conversation survives the trip. */}
+      <div className={styles.chatWrap} hidden={view !== "chat"}>
+        <ChatPanel onOpenTool={openFromChat} />
+      </div>
 
-            <nav className={styles.toolList} aria-label="Main tools">
-              {featured.map(toolButton)}
-            </nav>
+      {view !== "chat" ? (
+        <main className={styles.body} ref={bodyRef}>
+          {tool ? (
+            // Keyed so each visit starts fresh and re-reads the workbook.
+            <tool.panel key={`${tool.id}-${visit}`} navigate={navigate} params={params} />
+          ) : (
+            <>
+              <div className={styles.intro}>
+                <Text className={styles.greeting}>All tools</Text>
+                <Text className={styles.subtle}>
+                  The same things the chat does, as step-by-step screens, plus tools with more choices.
+                </Text>
+              </div>
 
-            <Text className={styles.sectionLabel}>More tools</Text>
-            <nav className={styles.toolList} aria-label="More tools">
-              {others.map(toolButton)}
-            </nav>
+              <nav className={styles.toolList} aria-label="Main tools">
+                {featured.map(toolButton)}
+              </nav>
 
-            <Tip>
-              Everything runs inside Excel on your computer and nothing is uploaded. For data that
-              matters, save a copy of the workbook before making big changes.
-            </Tip>
-          </>
-        )}
-      </main>
+              <Text className={styles.sectionLabel}>More tools</Text>
+              <nav className={styles.toolList} aria-label="More tools">
+                {others.map(toolButton)}
+              </nav>
+
+              <Tip>
+                Everything runs inside Excel on your computer and nothing is uploaded. For data that
+                matters, save a copy of the workbook before making big changes.
+              </Tip>
+            </>
+          )}
+        </main>
+      ) : null}
     </div>
   );
 };
