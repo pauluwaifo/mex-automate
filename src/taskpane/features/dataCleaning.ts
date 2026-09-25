@@ -9,6 +9,7 @@
 
 import {
   fail,
+  isBlankCell,
   isBlankRow,
   loadSelectedRange,
   loadUsedRange,
@@ -53,6 +54,8 @@ export type TextCaseMode = "upper" | "lower" | "proper" | "sentence";
 
 export interface TextCaseOptions extends RangeScopeOptions {
   mode: TextCaseMode;
+  /** Change the heading row too. Off by default, so "Order ID" stays "Order ID". */
+  includeHeaderRow?: boolean;
 }
 
 /** Number-format strings offered by the date standardizer. */
@@ -335,6 +338,42 @@ export function mapGrid(
   return { grid: mapped, changedCount };
 }
 
+/**
+ * True when the first row reads as headings: two or more labels, none of them
+ * a number or a date, sitting above rows that hold values.
+ */
+export function looksLikeHeaderRow(grid: Grid): boolean {
+  if (grid.length < 2) {
+    return false;
+  }
+  const labels = grid[0].filter((value) => typeof value === "string" && value.trim() !== "");
+  if (
+    labels.length < 2 ||
+    labels.length !== grid[0].filter((value) => !isBlankCell(value)).length
+  ) {
+    return false;
+  }
+  if (
+    labels.some(
+      (label) =>
+        parseFlexibleDate(label, { dayFirst: true }) !== null ||
+        /^[\s$£€]*[\d,.]+[%\s]*$/.test(String(label))
+    )
+  ) {
+    return false;
+  }
+  // Something below must be a value rather than another label.
+  return grid
+    .slice(1)
+    .some((row) =>
+      row.some(
+        (value) =>
+          typeof value === "number" ||
+          (typeof value === "string" && /^[\s$£€]*[\d,.]+[%\s]*$/.test(value))
+      )
+    );
+}
+
 /** Group ascending row offsets into contiguous [start, count] blocks. */
 export function groupContiguous(
   offsets: readonly number[]
@@ -508,7 +547,14 @@ export async function standardizeTextCase(options: TextCaseOptions): Promise<Ope
     await context.sync();
     const formulas = target.range.formulas as string[][];
 
+    // Headings are names, not prose: Title Case would turn "Order ID" into
+    // "Order Id" and break anything matching on the column name.
+    const skipHeaderRow = !options.includeHeaderRow && looksLikeHeaderRow(target.values);
+
     const { grid, changedCount } = mapGrid(target.values, (value, rowIndex, columnIndex) => {
+      if (skipHeaderRow && rowIndex === 0) {
+        return value;
+      }
       const formula = formulas[rowIndex]?.[columnIndex];
       if (typeof formula === "string" && formula.startsWith("=")) {
         return value;
@@ -521,7 +567,10 @@ export async function standardizeTextCase(options: TextCaseOptions): Promise<Ope
     }
 
     await writeGrid(context, target.sheet, target.rowIndex, target.columnIndex, grid);
-    return ok(`Updated the case of ${plural(changedCount, "cell")} in ${target.address}.`);
+    return ok(
+      `Updated the case of ${plural(changedCount, "cell")} in ${target.address}.`,
+      skipHeaderRow ? ["The heading row was left as it is."] : undefined
+    );
   });
 }
 

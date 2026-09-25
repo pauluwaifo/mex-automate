@@ -30,6 +30,12 @@ export interface CommandInfo {
 
 export const COMMANDS: CommandInfo[] = [
   {
+    command: "/review",
+    example: "/review",
+    description: "Check this sheet for mistakes and mark them in Excel",
+    group: "Main",
+  },
+  {
     command: "/fix",
     example: "/fix",
     description: "Find and fix everything wrong with this sheet",
@@ -96,6 +102,18 @@ export const COMMANDS: CommandInfo[] = [
     group: "More",
   },
   {
+    command: "/undo",
+    example: "/undo",
+    description: "Put back the cells from the last fix",
+    group: "More",
+  },
+  {
+    command: "/marks",
+    example: "/marks clear",
+    description: "Clear the marks Review left in the sheet",
+    group: "More",
+  },
+  {
     command: "/tools",
     example: "/tools",
     description: "Open the full tool screens (formulas, reports and more)",
@@ -116,12 +134,18 @@ export function completeCommand(typed: string): CommandInfo[] {
 // Intents
 // ---------------------------------------------------------------------------
 
-export type ToolName = "formulas" | "reports" | "merge" | "charts" | "clean" | "home";
+export type ToolName = "review" | "formulas" | "reports" | "merge" | "charts" | "clean" | "home";
 
 export type Intent =
   | { kind: "help" }
   | { kind: "hello" }
   | { kind: "fix"; sheet: string | null }
+  | { kind: "review"; sheet: string | null }
+  | { kind: "undo" }
+  | { kind: "clearMarks" }
+  | { kind: "unignore" }
+  | { kind: "show"; numbers: number[] }
+  | { kind: "ignore"; numbers: number[] }
   | { kind: "dashboard"; sheet: string | null }
   | { kind: "refresh"; name: string | null }
   | { kind: "duplicates" }
@@ -346,6 +370,23 @@ export function parseCommand(input: string, context: ParseContext): Intent {
       case "tidy":
       case "clean":
         return { kind: "fix", sheet: sheetIn(body) };
+      case "review":
+      case "check":
+      case "audit":
+        return { kind: "review", sheet: sheetIn(body) };
+      case "undo":
+        return { kind: "undo" };
+      case "marks":
+      case "unmark":
+        return { kind: "clearMarks" };
+      case "unignore":
+        return { kind: "unignore" };
+      case "show":
+      case "goto":
+        return { kind: "show", numbers: parseNumbers(body) };
+      case "ignore":
+      case "hide":
+        return { kind: "ignore", numbers: parseNumbers(body) };
       case "dashboard":
       case "dash":
         return { kind: "dashboard", sheet: sheetIn(body) };
@@ -412,7 +453,7 @@ export function parseCommand(input: string, context: ParseContext): Intent {
     };
   }
   if (
-    /^(only|just|build|use|keep|charts?|without|except|drop|remove|not)\b.*\d|^(only|just|top|first)\s+(one|two|three|four|five|six|seven|eight)\b/.test(
+    /^(only|just|build|fix|use|keep|charts?|without|except|drop|remove|not)\b.*\d|^(only|just|top|first)\s+(one|two|three|four|five|six|seven|eight)\b/.test(
       text
     )
   ) {
@@ -435,6 +476,19 @@ export function parseCommand(input: string, context: ParseContext): Intent {
 
   // Plain-language phrasings, most specific first.
   const sheet = findSheets(raw, context.sheets)[0] ?? null;
+  if (/^(undo|undo that|put (it|them) back|revert)\b/.test(text)) return { kind: "undo" };
+  if (/\b(clear|remove|hide)\b.*\b(marks?|highlights?|colou?rs?)\b/.test(text))
+    return { kind: "clearMarks" };
+  if (/\bunignore\b|\bbring (them|it) back\b/.test(text)) return { kind: "unignore" };
+  if (/^(ignore|hide|dismiss)\b/.test(text)) return { kind: "ignore", numbers: parseNumbers(text) };
+  if (/^(show|go ?to|take me to)\s+(me\s+)?\d/.test(text))
+    return { kind: "show", numbers: parseNumbers(text) };
+  if (
+    /\b(review|check|audit|proof ?read)\b/.test(text) ||
+    /what'?s wrong|any (mistakes|errors|problems)|is (this|it) (right|correct)/.test(text)
+  ) {
+    return { kind: "review", sheet };
+  }
   if (/\b(refresh|rebuild|update (the |my )?dashboard)\b/.test(text))
     return { kind: "refresh", name: null };
   if (/\bdash ?board\b/.test(text)) return { kind: "dashboard", sheet };

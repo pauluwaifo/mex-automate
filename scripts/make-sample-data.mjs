@@ -1,7 +1,7 @@
 /**
  * Generates sample data for manually testing the add-in in Excel.
  *
- * Writes samples/MEx-Automate-Test.xlsx (five sheets, deliberately messy) plus
+ * Writes samples/MEx-Automate-Test.xlsx (six sheets, deliberately messy) plus
  * two CSVs for the "merge files from my computer" path.
  *
  * The workbook is assembled straight from OOXML parts and zipped with fflate -
@@ -344,6 +344,42 @@ export function buildSalesExtract() {
 }
 const salesExtract = buildSalesExtract();
 
+// Sheet 6: a sheet that looks fine but isn't, for the Review tool. Every row
+// below is plausible; six of them are the kind of mistake that quietly makes a
+// report wrong. Revenue is calculated everywhere except row 9, which is typed
+// in; the total stops at row 14; SO-1003 is used twice; "acme ltd" and
+// "  Gamma Co " won't group with their proper spellings; row 13's Units is
+// text; row 12's Units has an extra zero; row 15 is dated five years out.
+const salesCheck = (() => {
+  const serial = (y, m, d) => Math.round((Date.UTC(y, m, d) - Date.UTC(1899, 11, 30)) / 86400000);
+  const orders = [
+    ["SO-1001", serial(2024, 0, 3), "Acme Ltd", 12, 12.5],
+    ["SO-1002", serial(2024, 0, 9), "Beta Trading", 8, 12.5],
+    ["SO-1003", serial(2024, 1, 2), "acme ltd", 20, 12.5],
+    ["SO-1004", serial(2024, 1, 14), "Gamma Co", 35, 12.5],
+    ["SO-1005", serial(2024, 2, 1), "Beta Trading", 7, 12.5],
+    ["SO-1003", serial(2024, 2, 8), "Delta Supplies", 5, 12.5],
+    ["SO-1007", serial(2024, 2, 19), "Gamma Co", 9, 12.5],
+    ["SO-1008", serial(2024, 3, 2), "Acme Ltd", 15, 12.5],
+    ["SO-1009", serial(2024, 3, 11), "Delta Supplies", 11, 12.5],
+    ["SO-1010", serial(2024, 3, 22), "Acme Ltd", 6, 12.5],
+    ["SO-1011", serial(2024, 4, 6), "Beta Trading", 9500, 12.5],
+    ["SO-1012", serial(2024, 4, 17), "Gamma Co", "1,250.00", 12.5],
+    ["SO-1013", serial(2024, 4, 28), "Delta Supplies", 10, 12.5],
+    ["SO-1014", serial(2029, 5, 4), "Acme Ltd", 13, 12.5],
+    ["SO-1015", serial(2024, 5, 12), "  Gamma Co ", 9, 12.5],
+  ];
+  const grid = [["Order ID", "Order Date", "Customer", "Units", "Unit Price", "Revenue"]];
+  orders.forEach((order, i) => {
+    const row = i + 2;
+    // Row 9 is typed in rather than calculated, like a value someone pasted.
+    grid.push([...order, row === 9 ? 187.5 : { f: `D${row}*E${row}` }]);
+  });
+  grid.push([]);
+  grid.push(["Total", null, null, null, null, { f: "SUM(F2:F14)" }]);
+  return grid;
+})();
+
 const aprCsv = `Order ID,Order Date,Customer,Region,Amount,Units
 60,2024-04-03,Acme Ltd,North,1310,3
 61,2024-04-08,Epsilon PLC,South,2750,6
@@ -370,6 +406,7 @@ fs.writeFileSync(
     { name: "Mar Orders", grid: marOrders },
     { name: "Sales Report", grid: salesReport },
     { name: "Sales Extract", grid: salesExtract },
+    { name: "Sales Check", grid: salesCheck },
   ])
 );
 

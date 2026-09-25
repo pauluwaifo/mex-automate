@@ -33,6 +33,17 @@ import {
 } from "./dataCleaning";
 import { fillFormulaAcrossSelection } from "./formulaPatterns";
 import { DEFAULT_MERGE_OPTIONS, mergeSheets } from "./merge";
+import { groupIssues, Issue, IssueGroup, summarize } from "./review";
+import {
+  applyFixes,
+  clearIgnored,
+  clearMarks,
+  goToGroup,
+  ignoreIssues,
+  markIssues,
+  reviewSheet,
+  undoLastFix,
+} from "./reviewSheet";
 import { countProblems, FindingId, previewTidy, TidyFinding, tidyToNewSheet } from "./tidy";
 
 // ---------------------------------------------------------------------------
@@ -59,7 +70,20 @@ export type BotContent =
       problemsFixed: number;
     }
   | { type: "result"; result: OperationResult }
-  | { type: "columns"; sheet: string; headers: string[] };
+  | { type: "columns"; sheet: string; headers: string[] }
+  | {
+      type: "issues";
+      sheet: string;
+      /** One entry per kind of problem per column, worst first. */
+      groups: IssueGroup[];
+      /** "3 errors, 12 to check". */
+      summary: string;
+      /** Marked in the sheet itself. */
+      marked: number;
+      /** Rows that aren't data - a hint that /fix is the better tool. */
+      structuralRows: number;
+      truncated: boolean;
+    };
 
 /** A suggested reply: what the chip says, and what it sends. */
 export interface Chip {
@@ -85,7 +109,8 @@ type Pending =
       chosen: number[];
       kpis: string[];
       problemsFixed: number;
-    };
+    }
+  | { kind: "review"; sheet: string; groups: IssueGroup[] };
 
 export interface AssistantState {
   pending: Pending;
@@ -100,6 +125,7 @@ const say = (text: string, chips: Chip[] = []): BotReply => ({
 const chip = (label: string, send = label): Chip => ({ label, send });
 
 export const STARTER_CHIPS: Chip[] = [
+  chip("Check this sheet", "/review"),
   chip("Fix this sheet", "/fix"),
   chip("Build a dashboard", "/dashboard"),
   chip("What can you do?", "/help"),
@@ -237,6 +263,71 @@ function resultReply(result: OperationResult, chips: Chip[] = []): BotReply {
   return { content: [{ type: "result", result }], chips };
 }
 
+function fixableCount(groups: readonly IssueGroup[]): number {
+  return groups.reduce((total, group) => total + group.fixable, 0);
+}
+
+function allIssues(groups: readonly IssueGroup[]): Issue[] {
+  return groups.flatMap((group) => group.issues);
+}
+
+/** Scan a sheet, mark the problem cells in Excel, and report what was found. */
+async function startReview(sheet: string | null): Promise<{ reply: BotReply; pending: Pending }> {
+  const review = await reviewSheet(sheet ?? undefined);
+  if (!review) {
+    return { reply: say("I couldn't find a table to check there."), pending: null };
+  }
+  if (review.issues.length === 0) {
+    const chips: Chip[] = [chip("Build a dashboard", `/dashboard ${review.sheet}`)];
+    if (review.structuralRows > 0)
+      chips.unshift(chip("Tidy up the layout", `/fix ${review.sheet}`));
+    return {
+      reply: say(
+        `I went through ${review.rows.toLocaleString()} rows of "${review.sheet}" and nothing looks wrong.` +
+          (review.ignored > 0 ? ` (${review.ignored} ignored.)` : ""),
+        chips
+      ),
+      pending: null,
+    };
+  }
+
+  const groups = groupIssues(review.issues);
+  const marked = await markIssues(review.sheet, review.issues);
+  const fixable = fixableCount(groups);
+  const chips: Chip[] = [];
+  if (fixable > 0) chips.push(chip(`Fix the ${fixable} safe ones`, "yes"));
+  chips.push(chip("Show me #1", "show 1"));
+  if (review.structuralRows > 0) chips.push(chip("Tidy the layout", `/fix ${review.sheet}`));
+  chips.push(chip("Clear marks", "/marks clear"));
+
+  return {
+    reply: {
+      content: [
+        {
+          type: "issues",
+          sheet: review.sheet,
+          groups,
+          summary: summarize(review.issues),
+          marked: marked.ok ? Math.min(review.issues.length, 300) : 0,
+          structuralRows: review.structuralRows,
+          truncated: review.truncated,
+        },
+      ],
+      chips,
+    },
+    pending: { kind: "review", sheet: review.sheet, groups },
+  };
+}
+
+/** Groups picked by number ("fix 2 and 3"), or all of them. */
+function pickedGroups(
+  pending: Extract<Pending, { kind: "review" }>,
+  numbers: readonly number[]
+): IssueGroup[] {
+  if (numbers.length === 0) return pending.groups;
+  return numbers.map((n) => pending.groups[n - 1]).filter(Boolean);
+}
+
 async function chart(
   intent: Extract<Intent, { kind: "chart" }>,
   active: string
@@ -368,6 +459,51 @@ async function handle(
       return { reply: started.reply, state: { pending: started.pending } };
     }
 
+    case "review": {
+      const started = await startReview(intent.sheet ?? workbook.active);
+      return { reply: started.reply, state: { pending: started.pending } };
+    }
+
+    case "show": {
+      if (pending?.kind !== "review") break;
+      const groups = pickedGroups(pending, intent.numbers);
+      if (groups.length === 0) return keep(say("I don't have a number like that in the list."));
+      const result = await goToGroup(pending.sheet, groups[0]);
+      const issue = groups[0].issues[0];
+      return keep({
+        content: [
+          { type: "text", text: `${groups[0].title} - ${issue.address}. ${issue.detail}` },
+          { type: "result", result },
+        ],
+        chips: [
+          ...(groups[0].fixable > 0
+            ? [chip("Fix this one", `fix ${pending.groups.indexOf(groups[0]) + 1}`)]
+            : []),
+          chip("Ignore it", `ignore ${pending.groups.indexOf(groups[0]) + 1}`),
+        ],
+      });
+    }
+
+    case "ignore": {
+      if (pending?.kind !== "review") break;
+      const groups = pickedGroups(pending, intent.numbers);
+      const result = await ignoreIssues(pending.sheet, allIssues(groups));
+      const remaining = pending.groups.filter((group) => !groups.includes(group));
+      return {
+        reply: resultReply(result, [chip("Check again", `/review ${pending.sheet}`)]),
+        state: { pending: remaining.length > 0 ? { ...pending, groups: remaining } : null },
+      };
+    }
+
+    case "unignore":
+      return keep(resultReply(await clearIgnored(), [chip("Check again", "/review")]));
+
+    case "undo":
+      return keep(resultReply(await undoLastFix()));
+
+    case "clearMarks":
+      return keep(resultReply(await clearMarks()));
+
     case "confirm": {
       if (pending?.kind === "fix") {
         const { result } = await tidyToNewSheet(
@@ -381,6 +517,20 @@ async function handle(
             result,
             result.ok ? [chip("Build a dashboard", `/dashboard ${pending.sheet}`)] : []
           )
+        );
+      }
+      if (pending?.kind === "review") {
+        const issues = allIssues(pending.groups).filter((issue) => issue.fix);
+        const result = await applyFixes(
+          pending.sheet,
+          issues,
+          `fixed ${issues.length} cells on "${pending.sheet}"`
+        );
+        return clear(
+          resultReply(result, [
+            chip("Check again", `/review ${pending.sheet}`),
+            chip("Undo that", "/undo"),
+          ])
         );
       }
       if (pending?.kind === "dashboard") {
@@ -434,6 +584,28 @@ async function handle(
     }
 
     case "pick": {
+      if (pending?.kind === "review") {
+        const groups = pickedGroups(pending, intent.numbers);
+        const issues = allIssues(groups).filter((issue) => issue.fix);
+        if (issues.length === 0) {
+          return keep(
+            say("Those need a decision from you, so I won't change them on a guess.", [
+              chip("Show me #1", "show 1"),
+            ])
+          );
+        }
+        const result = await applyFixes(
+          pending.sheet,
+          issues,
+          `fixed ${issues.length} cells on "${pending.sheet}"`
+        );
+        return keep(
+          resultReply(result, [
+            chip("Check again", `/review ${pending.sheet}`),
+            chip("Undo that", "/undo"),
+          ])
+        );
+      }
       if (pending?.kind !== "dashboard") break;
       const all = pending.charts.map((_c, i) => i + 1);
       const valid = intent.numbers.filter((n) => n <= pending.charts.length);
@@ -562,6 +734,7 @@ async function handle(
     case "open": {
       const names: Record<ToolName, string> = {
         home: "the full tool list",
+        review: "the Check for mistakes screen",
         formulas: "the Formulas tool",
         reports: "the Update a report tool",
         merge: "the Combine sheets tool",

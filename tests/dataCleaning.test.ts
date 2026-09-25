@@ -4,6 +4,7 @@ import {
   dedupeGrid,
   excelSerialToDate,
   groupContiguous,
+  looksLikeHeaderRow,
   mapGrid,
   parseFlexibleDate,
   toProperCase,
@@ -245,5 +246,41 @@ describe("groupContiguous", () => {
 
   it("handles an empty list", () => {
     expect(groupContiguous([])).toEqual([]);
+  });
+});
+
+describe("looksLikeHeaderRow", () => {
+  it("recognises a heading row above values", () => {
+    expect(
+      looksLikeHeaderRow([
+        ["Order ID", "Customer", "Amount"],
+        ["SO-1", "Acme Ltd", 120],
+      ])
+    ).toBe(true);
+  });
+
+  it("is not fooled by a row of data", () => {
+    expect(
+      looksLikeHeaderRow([
+        ["SO-1", "Acme Ltd", 120],
+        ["SO-2", "Beta Trading", 90],
+      ])
+    ).toBe(false);
+    expect(
+      looksLikeHeaderRow([
+        ["2024", "2025"],
+        [100, 200],
+      ])
+    ).toBe(false);
+    expect(looksLikeHeaderRow([["Order ID", "Customer"]])).toBe(false);
+  });
+
+  it("still counts a heading row with an unnamed column", () => {
+    expect(
+      looksLikeHeaderRow([
+        ["Order ID", null, "Amount"],
+        ["SO-1", "Acme", 12],
+      ])
+    ).toBe(true);
   });
 });

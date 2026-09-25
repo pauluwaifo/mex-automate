@@ -41,7 +41,70 @@ npm start          # builds, trusts the dev certificate, and sideloads into Exce
 
 ---
 
+## How you use it
+
+The pane opens on a **chat**. Type what you want, or tap a suggestion:
+
+```
+/review                              check this sheet for mistakes
+/fix                                 repair a messy export onto a new sheet
+/dashboard                           up to 8 charts and headline numbers
+/chart sum of Revenue by Region as pie
+fix 2 and 3                          act on items from the list just shown
+skip totals                          leave one kind of fix out
+undo                                 put back the cells from the last fix
+```
+
+Plain phrasings work too: "check this sheet", "remove duplicates", "pie of
+revenue by region", "what's wrong with this?". Type `/` for the full list.
+
+MEx is a **command assistant, not an AI**: no model, no API key, no network
+call, nothing sent anywhere. Commands are parsed against a fixed list, with
+forgiving matching for sheet and column names (case, spacing, plurals, small
+typos). When it can't tell what you meant it says so and suggests the closest
+commands, rather than guessing at something destructive.
+
+Anything large is previewed and waits for a yes. Small, targeted clean-ups run
+straight away on the cells named in the reply.
+
+The step-by-step screens are still there behind **All tools**, for the things
+with many choices, and the conversation survives the trip.
+
 ## Features
+
+### Check for mistakes (Review)
+Goes over a sheet looking for the errors that quietly produce wrong numbers,
+and **marks them in Excel itself**: red for errors, amber for things worth
+checking, blue for tidying.
+
+It finds:
+
+- **A typed-in number among formulas** - the classic broken column, where one
+  row was pasted over and stopped updating
+- **A total that misses rows** - `=SUM(F2:F14)` sitting under data that runs to
+  row 16, with the corrected range offered
+- **Numbers and dates stored as text**, so they never add up or sort
+- **An ID used twice**, naming the row it clashes with
+- **The same name spelled two ways**, which splits every chart and total
+- **Values far outside the rest** (by median absolute deviation, so the outlier
+  can't hide the outlier)
+- **Dates in the future or before 1990**, usually a mistyped year
+- **More than one currency in a column**, and negative counts
+
+Each one carries the exact cell, a plain-English explanation, and - where it's
+safe - a one-click fix. Anything needing judgement is reported without a fix,
+so nothing changes on a guess.
+
+Two details worth knowing:
+
+- **Marks are borrowed, not taken.** A cell's own fill colour is remembered
+  before it's highlighted, so *Clear marks* puts back exactly what was there.
+- **Undo is ours, not Excel's.** Ctrl+Z doesn't reliably cover what an add-in
+  writes, so every fix snapshots the cells first and *Undo last fix* restores
+  them exactly.
+
+Ignored issues are remembered inside the workbook, so a known quirk stops being
+reported.
 
 The home screen leads with the two tools most people need: **Fix messy data** and **Build a
 dashboard**. The rest sit under "More tools".
@@ -173,7 +236,9 @@ src/
     index.tsx                  React entry point; follows the Office theme
     components/
       App.tsx                  Home screen of tools, and the header with a back button
-      TidyPanel.tsx            ...one panel per tool
+      ChatPanel.tsx            The conversation: messages, chips, / autocomplete
+      ReviewPanel.tsx          ...and a screen per tool, for people who prefer buttons
+      TidyPanel.tsx
       DashboardPanel.tsx
       CleanPanel.tsx
       MergePanel.tsx
@@ -186,6 +251,10 @@ src/
       tidy.ts                  Table detection, repairs and findings (Fix messy data)
       dashboard.ts             Column profiling, chart suggestions, layout, refresh
       dataCleaning.ts          Pure transforms + Office.js drivers
+      review.ts                Mistake detectors (pure) - formulas, values, keys
+      reviewSheet.ts           Marking in the sheet, fixes, snapshot undo, ignore list
+      commands.ts              The assistant's command language (pure)
+      assistant.ts             Runs a command and answers with structured messages
       merge.ts                 Header planning + merge drivers
       charts.ts                Aggregation + chart drivers
       formulaPatterns.ts       A1 translation + template library
@@ -195,7 +264,8 @@ src/
       templateStore.ts         Template persistence in workbook settings
       workbookReader.ts        .xlsx / .csv parsing
       types.ts                 Shared domain types
-tests/                         Jest unit tests (263)
+    theme.ts                   The website's jade palette and type, as a Fluent theme
+tests/                         Jest unit tests (331)
 manifest.xml                   Add-in manifest
 ```
 
@@ -209,7 +279,8 @@ write back. Every driver returns the same `OperationResult` shape, which is what
 npm test
 ```
 
-263 unit tests cover the pure logic, including table detection and every kind of repair on a
+331 unit tests cover the pure logic, including the mistake detectors and the
+command parser, table detection and every kind of repair on a
 deliberately nasty export, chart suggestion, time bucketing, chart data and dashboard layout, and
 regression tests for bugs caught on the sample sheet. Also covered: grid transforms, dedupe keying, date parsing and Excel serial
 conversion, header planning, merging and sorting, grouped aggregation and chart validation, CSV
@@ -236,6 +307,9 @@ The sample workbook is built to exercise every tab:
 
 | Tab | What to try | What should happen |
 | --- | --- | --- |
+| Review | Open **Sales Check**, then type `/review` | Six planted mistakes found and marked in the sheet: a typed-in number among formulas, a SUM that stops at row 14, text Units, a repeated ID, "acme ltd", a 2029 date |
+| Review | Say `fix 1`, then `undo` | The safe fixes apply, then the cells come back exactly as they were |
+| Review | Say `show 2`, then `ignore 2` | Excel jumps to the cells; ignored issues stay gone on the next check |
 | Fix messy data | Open **Sales Extract**, then Fix messy data | About 250 problems listed by kind; Fix writes a clean 78-row table to "Sales Extract (clean)" |
 | Build a dashboard | Point it at **Sales Extract** (the messy one) | Eight suggestions with reasons; Build lays out headline numbers and eight charts on a new sheet |
 | Build a dashboard | Change some Revenue values in Sales Extract, then Refresh | The same dashboard is rebuilt with the new numbers |

@@ -9,6 +9,7 @@ import {
   ChevronRight20Regular,
   DataPie24Regular,
   MathFormula24Regular,
+  TableSearch24Regular,
   TableSparkle24Regular,
   TableStackBelow24Regular,
 } from "@fluentui/react-icons";
@@ -22,10 +23,11 @@ import DashboardPanel from "./DashboardPanel";
 import FormulaPanel from "./FormulaPanel";
 import MergePanel from "./MergePanel";
 import ReportPanel from "./ReportPanel";
+import ReviewPanel from "./ReviewPanel";
 import TidyPanel from "./TidyPanel";
 import { Tip } from "./ui";
 
-export type ToolId = "tidy" | "dashboard" | "clean" | "merge" | "charts" | "formulas" | "reports";
+export type ToolId = "review" | "tidy" | "dashboard" | "clean" | "merge" | "charts" | "formulas" | "reports";
 
 /** Lets one tool hand the user on to another, e.g. "Build a dashboard from it". */
 export interface ToolParams {
@@ -50,6 +52,14 @@ interface Tool {
 
 /** The home screen, in the order most people reach for them. */
 const TOOLS: Tool[] = [
+  {
+    id: "review",
+    title: "Check for mistakes",
+    description: "Marks errors in the sheet: broken totals, text numbers, duplicates, odd values.",
+    icon: <TableSearch24Regular />,
+    panel: ReviewPanel,
+    featured: true,
+  },
   {
     id: "tidy",
     title: "Fix messy data",
@@ -255,6 +265,7 @@ type View = "chat" | "tools" | ToolId;
 /** Tool screens the assistant can open by name. */
 const TOOL_FOR: Record<ToolName, View> = {
   home: "tools",
+  review: "review",
   formulas: "formulas",
   reports: "reports",
   merge: "merge",

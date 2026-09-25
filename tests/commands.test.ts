@@ -212,3 +212,34 @@ describe("helpers", () => {
     expect(suggestCommands("dashbord")[0]).toBe("dashboard".replace(/^/, "/"));
   });
 });
+
+describe("review commands", () => {
+  it("maps the review family", () => {
+    expect(parse("/review")).toEqual({ kind: "review", sheet: null });
+    expect(parse("/review Sales Extract")).toEqual({ kind: "review", sheet: "Sales Extract" });
+    expect(parse("/check").kind).toBe("review");
+    expect(parse("/undo").kind).toBe("undo");
+    expect(parse("/marks clear").kind).toBe("clearMarks");
+    expect(parse("/unignore").kind).toBe("unignore");
+    expect(parse("/show 2")).toEqual({ kind: "show", numbers: [2] });
+    expect(parse("/ignore 3")).toEqual({ kind: "ignore", numbers: [3] });
+  });
+
+  it("understands the everyday phrasings", () => {
+    expect(parse("check this sheet for mistakes").kind).toBe("review");
+    expect(parse("what's wrong with this sheet?").kind).toBe("review");
+    expect(parse("any errors here").kind).toBe("review");
+    expect(parse("undo that").kind).toBe("undo");
+    expect(parse("clear the marks").kind).toBe("clearMarks");
+    expect(parse("show me 2")).toEqual({ kind: "show", numbers: [2] });
+    expect(parse("ignore 4")).toEqual({ kind: "ignore", numbers: [4] });
+  });
+
+  it("reads which numbered items to fix", () => {
+    expect(parse("fix 2 and 3")).toEqual({ kind: "pick", numbers: [2, 3], exclude: false });
+  });
+
+  it("keeps 'fix this sheet' separate from 'fix 2'", () => {
+    expect(parse("fix this sheet").kind).toBe("fix");
+  });
+});

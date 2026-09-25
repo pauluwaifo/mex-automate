@@ -201,6 +201,16 @@ const useStyles = makeStyles({
     display: "flex",
     color: tokens.colorBrandForeground1,
   },
+  severity: {
+    flexShrink: 0,
+    width: "8px",
+    height: "8px",
+    borderRadius: "2px",
+    marginTop: "5px",
+  },
+  sevError: { backgroundColor: tokens.colorPaletteRedForeground1 },
+  sevWarning: { backgroundColor: tokens.colorPaletteMarigoldForeground1 },
+  sevTidy: { backgroundColor: tokens.colorBrandForeground1 },
   result: {
     display: "flex",
     alignItems: "flex-start",
@@ -661,6 +671,59 @@ const Content: React.FC<{ content: BotContent; onCommand: (text: string) => void
             ) : null}
           </div>
         </div>
+      );
+
+    case "issues":
+      return (
+        <>
+          <div className={styles.headline}>
+            <span className={styles.bigNumber}>
+              {content.groups.reduce((total, group) => total + group.issues.length, 0).toLocaleString()}
+            </span>
+            <Text weight="semibold">
+              to look at on &quot;{content.sheet}&quot;: {content.summary}
+            </Text>
+          </div>
+          <ul className={styles.list}>
+            {content.groups.map((group, i) => (
+              <li key={group.group} className={styles.item}>
+                <span className={styles.number}>{i + 1}</span>
+                <span
+                  className={mergeClasses(
+                    styles.severity,
+                    group.severity === "error" && styles.sevError,
+                    group.severity === "warning" && styles.sevWarning,
+                    group.severity === "tidy" && styles.sevTidy
+                  )}
+                  aria-label={group.severity === "error" ? "Error" : group.severity === "warning" ? "Check" : "Tidy up"}
+                />
+                <span className={styles.itemText}>
+                  <span className={styles.itemTitle}>
+                    {group.title}
+                    {group.header ? ` in ${group.header}` : ""}
+                  </span>
+                  <span className={styles.hint}>
+                    {group.issues.length === 1 ? group.issues[0].address : `${group.issues.length} cells`}
+                    {group.fixable > 0 ? ` · ${group.fixable} fixable` : " · needs your call"}
+                  </span>
+                </span>
+                <span className={styles.count}>{group.issues.length.toLocaleString()}</span>
+              </li>
+            ))}
+          </ul>
+          <Text className={styles.hint}>
+            {content.marked > 0
+              ? `Marked in the sheet: red for errors, amber to check, blue for tidy-ups. Say "show 2" to jump to one, "fix 2" to fix that kind, or "ignore 2" to stop reporting it.`
+              : `Say "show 2" to jump to one, "fix 2" to fix that kind, or "ignore 2" to stop reporting it.`}
+          </Text>
+          {content.structuralRows > 0 ? (
+            <Text className={styles.hint}>
+              This sheet also has {content.structuralRows.toLocaleString()} rows that aren&apos;t data (titles, totals or
+              group headings). /fix handles those.
+            </Text>
+          ) : null}
+          {content.truncated ? <Text className={styles.hint}>Only the first 20,000 rows were checked.</Text> : null}
+        </>
       );
 
     case "columns":
