@@ -335,6 +335,30 @@ export async function writeGridWithFormats(
   }
 }
 
+/**
+ * Write one value (and optionally a number format) into a single cell.
+ *
+ * Office.js checks the array you pass against the *whole* range, and a merged
+ * range still reports every cell it covers - so assigning `[[value]]` to a
+ * three-column merged title is rejected with "The number of rows or columns in
+ * the input array doesn't match the size or dimensions of the range". Writing
+ * through the top-left cell avoids that trap everywhere.
+ */
+export function writeCell(
+  sheet: Excel.Worksheet,
+  rowIndex: number,
+  columnIndex: number,
+  value: CellValue,
+  numberFormat?: string
+): Excel.Range {
+  const cell = sheet.getRangeByIndexes(rowIndex, columnIndex, 1, 1);
+  cell.values = [[value]];
+  if (numberFormat) {
+    cell.numberFormat = [[numberFormat]];
+  }
+  return cell;
+}
+
 /** Excel forbids these characters in sheet names and caps the name at 31 characters. */
 export function sanitizeSheetName(desiredName: string): string {
   const cleaned = desiredName.replace(/[:\\/?*[\]]/g, "-").trim();

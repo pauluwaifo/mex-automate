@@ -651,7 +651,10 @@ const Content: React.FC<{ content: BotContent; onCommand: (text: string) => void
               changed.
             </Text>
           ) : null}
-          <Text className={styles.hint}>To change the set, say &quot;build 1, 2 and 5&quot; or &quot;without 7&quot;.</Text>
+          <Text className={styles.hint}>
+            To change the set, say &quot;build 1, 2 and 5&quot;, &quot;without 7&quot;, or add your own: &quot;add a pie
+            of Units by Channel&quot;.
+          </Text>
         </>
       );
 

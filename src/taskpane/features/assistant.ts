@@ -21,7 +21,9 @@ import { COMMANDS, Intent, matchHeader, parseCommand, skipTargets, ToolName } fr
 import {
   analyzeDashboard,
   buildDashboard,
+  customChart,
   DashChart,
+  DashChartKind,
   listDashboards,
   refreshDashboard,
 } from "./dashboard";
@@ -215,8 +217,11 @@ function dashboardChips(chosen: readonly number[]): Chip[] {
   ];
 }
 
-async function startDashboard(sheet: string): Promise<{ reply: BotReply; pending: Pending }> {
-  const analysis = await analyzeDashboard({ kind: "sheet", name: sheet });
+async function startDashboard(
+  sheet: string,
+  max: number | null = null
+): Promise<{ reply: BotReply; pending: Pending }> {
+  const analysis = await analyzeDashboard({ kind: "sheet", name: sheet }, max ? { max } : {});
   const plan = analysis.plan;
   if (!plan) {
     return { reply: say(`I couldn't find a table on "${sheet}" to chart.`), pending: null };
@@ -241,6 +246,76 @@ async function startDashboard(sheet: string): Promise<{ reply: BotReply; pending
   };
   return { reply: chartsReply(pending), pending };
 }
+
+/** Add a chart the user asked for by name to the dashboard being planned. */
+async function addChartToPlan(
+  intent: Extract<Intent, { kind: "chart" }>,
+  pending: Extract<Pending, { kind: "dashboard" }>
+): Promise<{ reply: BotReply; pending: Pending }> {
+  const headers = await readSourceHeaders({ kind: "sheet", name: pending.sheet });
+  const analysis = await analyzeDashboard({ kind: "sheet", name: pending.sheet });
+  const profiles = analysis.plan?.profiles ?? [];
+  const dimension = matchHeader(intent.dimension, headers);
+  const measure = matchHeader(intent.measure, headers);
+
+  if (!dimension && intent.chartType !== "xyscatter") {
+    return {
+      reply: {
+        content: [
+          {
+            type: "text",
+            text: "Which column should it group by? For example: add a pie of Units by Channel.",
+          },
+          { type: "columns", sheet: pending.sheet, headers },
+        ],
+        chips: dashboardChips(pending.chosen),
+      },
+      pending,
+    };
+  }
+
+  const kind = CHART_KIND_FOR[intent.chartType ?? "columnClustered"] ?? "column";
+  const chart = customChart(
+    {
+      kind,
+      dimension,
+      measure,
+      measure2:
+        kind === "scatter" ? (measure ? (headers.find((h) => h !== measure) ?? null) : null) : null,
+      aggregation: measure ? (intent.aggregation === "average" ? "sum" : "sum") : "count",
+    },
+    profiles
+  );
+  if (!chart) {
+    return {
+      reply: say("I couldn't make a chart from those columns.", dashboardChips(pending.chosen)),
+      pending,
+    };
+  }
+  if (pending.charts.some((existing) => existing.id === chart.id)) {
+    return {
+      reply: say(`"${chart.title}" is already on the list.`, dashboardChips(pending.chosen)),
+      pending,
+    };
+  }
+
+  const charts = [...pending.charts, chart];
+  const next = { ...pending, charts, chosen: [...pending.chosen, charts.length] };
+  return { reply: chartsReply(next), pending: next };
+}
+
+/** Chart-type ids the parser produces, mapped to the dashboard's own kinds. */
+const CHART_KIND_FOR: Record<string, DashChartKind> = {
+  columnClustered: "column",
+  columnStacked: "stackedColumn",
+  barClustered: "bar",
+  lineMarkers: "line",
+  line: "line",
+  area: "line",
+  pie: "pie",
+  doughnut: "doughnut",
+  xyscatter: "scatter",
+};
 
 function chartsReply(pending: Extract<Pending, { kind: "dashboard" }>): BotReply {
   return {
@@ -455,7 +530,7 @@ async function handle(
     }
 
     case "dashboard": {
-      const started = await startDashboard(intent.sheet ?? workbook.active);
+      const started = await startDashboard(intent.sheet ?? workbook.active, intent.max);
       return { reply: started.reply, state: { pending: started.pending } };
     }
 
@@ -725,8 +800,15 @@ async function handle(
       return clear(resultReply(await mergeSheets(sheets, { ...DEFAULT_MERGE_OPTIONS })));
     }
 
-    case "chart":
+    case "chart": {
+      // "add a pie of Units by Channel" while a dashboard is being planned
+      // extends that plan rather than making a chart on its own.
+      if (intent.add && pending?.kind === "dashboard") {
+        const added = await addChartToPlan(intent, pending);
+        return { reply: added.reply, state: { pending: added.pending } };
+      }
       return clear(await chart(intent, workbook.active));
+    }
 
     case "fill":
       return clear(resultReply(await fillFormulaAcrossSelection()));

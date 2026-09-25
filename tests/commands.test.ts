@@ -16,7 +16,7 @@ describe("slash commands", () => {
   it("maps each command to its action", () => {
     expect(parse("/help").kind).toBe("help");
     expect(parse("/fix")).toEqual({ kind: "fix", sheet: null });
-    expect(parse("/dashboard")).toEqual({ kind: "dashboard", sheet: null });
+    expect(parse("/dashboard")).toEqual({ kind: "dashboard", sheet: null, max: null });
     expect(parse("/refresh")).toEqual({ kind: "refresh", name: null });
     expect(parse("/duplicates").kind).toBe("duplicates");
     expect(parse("/spaces").kind).toBe("spaces");
@@ -37,6 +37,7 @@ describe("slash commands", () => {
     expect(parse("/dashboard on sales extract (clean)")).toEqual({
       kind: "dashboard",
       sheet: "Sales Extract (clean)",
+      max: null,
     });
   });
 
@@ -69,6 +70,7 @@ describe("charts in plain words", () => {
   it("reads aggregation, measure, dimension and chart type", () => {
     expect(parse("/chart sum of Revenue by Region as pie")).toEqual({
       kind: "chart",
+      add: false,
       summaryOnly: false,
       aggregation: "sum",
       measure: "revenue",
@@ -241,5 +243,27 @@ describe("review commands", () => {
 
   it("keeps 'fix this sheet' separate from 'fix 2'", () => {
     expect(parse("fix this sheet").kind).toBe("fix");
+  });
+});
+
+describe("shaping a dashboard", () => {
+  it("reads a chart limit", () => {
+    expect(parse("/dashboard 5")).toMatchObject({ kind: "dashboard", max: 5 });
+    expect(parse("build a dashboard with 4 charts")).toMatchObject({ kind: "dashboard", max: 4 });
+  });
+
+  it("reads an added chart", () => {
+    expect(parse("add a pie of Units by Channel")).toMatchObject({
+      kind: "chart",
+      add: true,
+      chartType: "pie",
+      measure: "units",
+      dimension: "channel",
+    });
+    expect(parse("/add line of Revenue by Order Date")).toMatchObject({
+      add: true,
+      chartType: "lineMarkers",
+    });
+    expect(parse("/chart sum of Revenue by Region")).toMatchObject({ add: false });
   });
 });

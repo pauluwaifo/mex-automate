@@ -14,6 +14,7 @@ import {
   tokens,
 } from "@fluentui/react-components";
 import {
+  Add20Regular,
   ArrowSync20Regular,
   Board24Regular,
   DataBarHorizontal20Regular,
@@ -28,18 +29,30 @@ import { DataSourceRef, listSourceOptions, SourceOption } from "../features/char
 import {
   analyzeDashboard,
   buildDashboard,
+  customChart,
   DashboardAnalysis,
   DashboardConfig,
+  DashChart,
   DashChartKind,
   listDashboards,
   MAX_CHARTS,
   refreshDashboard,
 } from "../features/dashboard";
 import type { ToolProps } from "./App";
-import { ActionButton, Step, Tip, useActionRunner, useSharedStyles } from "./ui";
+import { ActionButton, MoreOptions, Step, Tip, useActionRunner, useSharedStyles } from "./ui";
 import { useSelectionVersion } from "./useSelection";
 
 const SELECTION_KEY = "selection";
+
+const KIND_LABEL: Record<DashChartKind, string> = {
+  column: "Column",
+  bar: "Bar",
+  line: "Line",
+  pie: "Pie",
+  doughnut: "Doughnut",
+  stackedColumn: "Stacked column",
+  scatter: "Scatter",
+};
 
 const KIND_ICON: Record<DashChartKind, React.ReactElement> = {
   line: <DataLine20Regular />,
@@ -133,6 +146,14 @@ const DashboardPanel: React.FC<ToolProps> = ({ navigate, params }) => {
   const [loading, setLoading] = React.useState(false);
   const [chosen, setChosen] = React.useState<Set<string>>(new Set());
   const [includeKpis, setIncludeKpis] = React.useState(true);
+  // Shaping controls: which columns to use, how many charts, and charts the
+  // user builds themselves.
+  const [useColumns, setUseColumns] = React.useState<string[]>([]);
+  const [maxCharts, setMaxCharts] = React.useState<number>(MAX_CHARTS);
+  const [extra, setExtra] = React.useState<DashChart[]>([]);
+  const [newKind, setNewKind] = React.useState<DashChartKind>("column");
+  const [newMeasure, setNewMeasure] = React.useState<string>("");
+  const [newDimension, setNewDimension] = React.useState<string>("");
   const [title, setTitle] = React.useState("");
   const [titleEdited, setTitleEdited] = React.useState(false);
 
@@ -147,7 +168,7 @@ const DashboardPanel: React.FC<ToolProps> = ({ navigate, params }) => {
   React.useEffect(() => {
     let active = true;
     setLoading(true);
-    void analyzeDashboard(sourceRef).then((next) => {
+    void analyzeDashboard(sourceRef, { max: maxCharts, useColumns }).then((next) => {
       if (!active) return;
       setAnalysis(next);
       setLoading(false);
@@ -157,14 +178,34 @@ const DashboardPanel: React.FC<ToolProps> = ({ navigate, params }) => {
     return () => {
       active = false;
     };
-  }, [sourceRef, selectionDependency]);
+  }, [sourceRef, selectionDependency, maxCharts, useColumns]);
 
   React.useEffect(() => {
     if (!titleEdited && analysis?.plan) setTitle(`${analysis.sourceName} dashboard`);
   }, [analysis, titleEdited]);
 
   const plan = analysis?.plan ?? null;
-  const selected = plan?.charts.filter((chart) => chosen.has(chart.id)) ?? [];
+  // The user's own charts sit after the suggestions, and are always included.
+  const charts = React.useMemo(() => [...(plan?.charts ?? []), ...extra], [plan, extra]);
+  const selected = charts.filter((chart) => chosen.has(chart.id));
+  const profiles = plan?.profiles ?? [];
+  const groupable = profiles
+    .filter((profile) => profile.kind === "category" || profile.kind === "date" || profile.kind === "text")
+    .map((profile) => profile.header);
+  const measurable = profiles
+    .filter((profile) => profile.kind === "number" || profile.kind === "currency" || profile.kind === "percent")
+    .map((profile) => profile.header);
+
+  const addChart = () => {
+    const chart = customChart(
+      { kind: newKind, dimension: newDimension || null, measure: newMeasure || null },
+      profiles
+    );
+    if (!chart) return;
+    if (charts.some((existing) => existing.id === chart.id)) return;
+    setExtra((current) => [...current, chart]);
+    setChosen((current) => new Set([...current, chart.id]));
+  };
 
   const toggle = (id: string) =>
     setChosen((current) => {
@@ -262,7 +303,7 @@ const DashboardPanel: React.FC<ToolProps> = ({ navigate, params }) => {
           </Text>
         ) : null}
         <div className={styles.list}>
-          {plan?.charts.map((chart) => {
+          {charts.map((chart) => {
             const on = chosen.has(chart.id);
             return (
               <button
@@ -283,6 +324,91 @@ const DashboardPanel: React.FC<ToolProps> = ({ navigate, params }) => {
             );
           })}
         </div>
+        {plan ? (
+          <div className={shared.column}>
+            <Field label="Columns to use" hint="Leave empty to use them all.">
+              <Dropdown
+                multiselect
+                placeholder="Every column"
+                selectedOptions={useColumns}
+                value={useColumns.length === 0 ? "Every column" : useColumns.join(", ")}
+                onOptionSelect={(_event, data) => setUseColumns(data.selectedOptions)}
+              >
+                {plan.headers.map((header) => (
+                  <Option key={header} value={header}>
+                    {header}
+                  </Option>
+                ))}
+              </Dropdown>
+            </Field>
+            <Field label="How many charts to suggest">
+              <Input
+                type="number"
+                min={1}
+                max={MAX_CHARTS}
+                value={String(maxCharts)}
+                onChange={(_event, data) => {
+                  const value = Number(data.value);
+                  if (value >= 1 && value <= MAX_CHARTS) setMaxCharts(value);
+                }}
+              />
+            </Field>
+
+            <MoreOptions label="Build one myself">
+              <Field label="Chart">
+                <Dropdown
+                  value={KIND_LABEL[newKind]}
+                  selectedOptions={[newKind]}
+                  onOptionSelect={(_event, data) => setNewKind(data.optionValue as DashChartKind)}
+                >
+                  {(Object.keys(KIND_LABEL) as DashChartKind[]).map((kind) => (
+                    <Option key={kind} value={kind} text={KIND_LABEL[kind]}>
+                      {KIND_LABEL[kind]}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Field>
+              <Field label="Of" hint="Leave empty to count rows instead.">
+                <Dropdown
+                  placeholder="Count of rows"
+                  value={newMeasure}
+                  selectedOptions={newMeasure ? [newMeasure] : []}
+                  onOptionSelect={(_event, data) => setNewMeasure(String(data.optionValue))}
+                >
+                  <Option value="">Count of rows</Option>
+                  {measurable.map((header) => (
+                    <Option key={header} value={header}>
+                      {header}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Field>
+              <Field label="For each">
+                <Dropdown
+                  placeholder="Choose a column"
+                  value={newDimension}
+                  selectedOptions={newDimension ? [newDimension] : []}
+                  onOptionSelect={(_event, data) => setNewDimension(String(data.optionValue))}
+                >
+                  {groupable.map((header) => (
+                    <Option key={header} value={header}>
+                      {header}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Field>
+              <Button
+                appearance="secondary"
+                icon={<Add20Regular />}
+                disabled={!newDimension && newKind !== "scatter"}
+                onClick={addChart}
+              >
+                Add this chart
+              </Button>
+            </MoreOptions>
+          </div>
+        ) : null}
+
         {plan && plan.kpis.length > 0 ? (
           <>
             <Switch

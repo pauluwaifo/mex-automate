@@ -3,6 +3,7 @@ import {
   buildChartData,
   chooseGrain,
   colorsFor,
+  customChart,
   DashChart,
   layoutDashboard,
   LAYOUT,
@@ -375,5 +376,77 @@ describe("regressions found on a real-sized export", () => {
     const titles = suggestCharts(profiles, rows).map((chart) => chart.title);
     expect(titles).toContain("Top 10 Product by Revenue");
     expect(titles.some((title) => /^Top 10 Region/.test(title))).toBe(false);
+  });
+});
+
+describe("charts the user specifies", () => {
+  it("builds a chart from chosen columns", () => {
+    const chart = customChart({ kind: "pie", dimension: "Channel", measure: "Revenue" }, PROFILES)!;
+    expect(chart).toMatchObject({
+      kind: "pie",
+      dimension: "Channel",
+      measure: "Revenue",
+      aggregation: "sum",
+      title: "Revenue by Channel",
+      topN: 6,
+    });
+    expect(buildChartData(chart, PROFILES, ROWS)).not.toBeNull();
+  });
+
+  it("counts rows when no measure is given", () => {
+    const chart = customChart({ kind: "column", dimension: "Region", measure: null }, PROFILES)!;
+    expect(chart.aggregation).toBe("count");
+    expect(chart.title).toBe("Count by Region");
+  });
+
+  it("knows a date column means over time", () => {
+    const chart = customChart(
+      { kind: "line", dimension: "Order Date", measure: "Revenue" },
+      PROFILES
+    )!;
+    expect(chart.timeGrain).toBe("month");
+    expect(chart.title).toBe("Revenue over time");
+  });
+
+  it("refuses combinations that can't be charted", () => {
+    expect(
+      customChart({ kind: "column", dimension: null, measure: "Revenue" }, PROFILES)
+    ).toBeNull();
+    expect(
+      customChart({ kind: "scatter", dimension: null, measure: "Revenue" }, PROFILES)
+    ).toBeNull();
+    expect(
+      customChart({ kind: "pie", dimension: "Nope", measure: "Revenue" }, PROFILES)
+    ).toBeNull();
+  });
+
+  it("gives the same id for the same chart, so it isn't added twice", () => {
+    const first = customChart({ kind: "pie", dimension: "Channel", measure: "Revenue" }, PROFILES)!;
+    const again = customChart({ kind: "pie", dimension: "Channel", measure: "Revenue" }, PROFILES)!;
+    expect(first.id).toBe(again.id);
+  });
+});
+
+describe("planDashboard options", () => {
+  it("caps how many charts are suggested", () => {
+    expect(planDashboard(HEADERS, PROFILES, ROWS, { max: 3 }).charts).toHaveLength(3);
+  });
+
+  it("suggests only from the columns chosen", () => {
+    const plan = planDashboard(HEADERS, PROFILES, ROWS, { useColumns: ["Region", "Revenue"] });
+    plan.charts.forEach((chart) => {
+      [chart.dimension, chart.series, chart.measure, chart.measure2]
+        .filter(Boolean)
+        .forEach((column) => expect(["Region", "Revenue"]).toContain(column));
+    });
+    expect(plan.charts.length).toBeGreaterThan(0);
+    // The full column list is still available for charts built by hand.
+    expect(plan.profiles).toHaveLength(HEADERS.length);
+  });
+
+  it("uses every column when none are chosen", () => {
+    expect(planDashboard(HEADERS, PROFILES, ROWS, { useColumns: [] }).charts.length).toBe(
+      planDashboard(HEADERS, PROFILES, ROWS).charts.length
+    );
   });
 });

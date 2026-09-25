@@ -146,7 +146,7 @@ export type Intent =
   | { kind: "unignore" }
   | { kind: "show"; numbers: number[] }
   | { kind: "ignore"; numbers: number[] }
-  | { kind: "dashboard"; sheet: string | null }
+  | { kind: "dashboard"; sheet: string | null; max: number | null }
   | { kind: "refresh"; name: string | null }
   | { kind: "duplicates" }
   | { kind: "spaces" }
@@ -155,6 +155,8 @@ export type Intent =
   | { kind: "combine"; sheets: string[]; all: boolean }
   | {
       kind: "chart";
+      /** "add a pie of Units by Channel" adds to the dashboard being planned. */
+      add: boolean;
       summaryOnly: boolean;
       aggregation: Aggregation;
       measure: string | null;
@@ -250,8 +252,13 @@ const AGGREGATION_WORDS: Array<[RegExp, Aggregation]> = [
   [/\b(sum|total)\b/, "sum"],
 ];
 
-function parseChart(body: string, summaryOnly: boolean, sheets: readonly string[]): Intent {
-  let text = body.toLowerCase();
+function parseChart(
+  body: string,
+  summaryOnly: boolean,
+  sheets: readonly string[],
+  add = false
+): Intent {
+  let text = body.toLowerCase().replace(/^\s*(add|include|also)\s+/, "");
 
   // "... on Sales Extract" / "... from Sales Extract"
   let sheet: string | null = null;
@@ -307,7 +314,7 @@ function parseChart(body: string, summaryOnly: boolean, sheets: readonly string[
   const measure = split ? split[1].trim() || null : cleaned || null;
   const dimension = split ? split[2].trim() || null : null;
 
-  return { kind: "chart", summaryOnly, aggregation, measure, dimension, chartType, sheet };
+  return { kind: "chart", add, summaryOnly, aggregation, measure, dimension, chartType, sheet };
 }
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -389,7 +396,8 @@ export function parseCommand(input: string, context: ParseContext): Intent {
         return { kind: "ignore", numbers: parseNumbers(body) };
       case "dashboard":
       case "dash":
-        return { kind: "dashboard", sheet: sheetIn(body) };
+        // "/dashboard 5 charts" caps how many are suggested.
+        return { kind: "dashboard", sheet: sheetIn(body), max: parseNumbers(body)[0] ?? null };
       case "refresh":
       case "update":
         return { kind: "refresh", name: body.trim() || null };
@@ -409,6 +417,9 @@ export function parseCommand(input: string, context: ParseContext): Intent {
       case "graph":
       case "plot":
         return parseChart(body, false, context.sheets);
+      case "add":
+      case "include":
+        return parseChart(body, false, context.sheets, true);
       case "summary":
       case "summarize":
       case "summarise":
@@ -452,7 +463,10 @@ export function parseCommand(input: string, context: ParseContext): Intent {
         .filter(Boolean),
     };
   }
+  // Numbers picked from the list just shown ("build 1, 2 and 5"). A message
+  // that says "dashboard" is a fresh request, not a pick from a list.
   if (
+    !/dash ?board/.test(text) &&
     /^(only|just|build|fix|use|keep|charts?|without|except|drop|remove|not)\b.*\d|^(only|just|top|first)\s+(one|two|three|four|five|six|seven|eight)\b/.test(
       text
     )
@@ -491,7 +505,9 @@ export function parseCommand(input: string, context: ParseContext): Intent {
   }
   if (/\b(refresh|rebuild|update (the |my )?dashboard)\b/.test(text))
     return { kind: "refresh", name: null };
-  if (/\bdash ?board\b/.test(text)) return { kind: "dashboard", sheet };
+  if (/^(add|include|also)\b/.test(text)) return parseChart(raw, false, context.sheets, true);
+  if (/\bdash ?board\b/.test(text))
+    return { kind: "dashboard", sheet, max: parseNumbers(text)[0] ?? null };
   if (/\b(combine|merge|stack|append)\b/.test(text))
     return parseCombine(raw.replace(/^.*?\b(combine|merge|stack|append)\b/i, ""), context.sheets);
   if (/\b(duplicates?|dupes?|dedupe|repeated rows)\b/.test(text)) return { kind: "duplicates" };

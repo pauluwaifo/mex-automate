@@ -21,6 +21,7 @@ import {
   ok,
   plural,
   runExcel,
+  writeCell,
   writeGrid,
 } from "../shared/excelHelpers";
 import { CellValue, Grid, OperationResult } from "../shared/types";
@@ -399,6 +400,84 @@ export function suggestCharts(
   return charts.slice(0, max);
 }
 
+export interface CustomChartRequest {
+  kind: DashChartKind;
+  /** Column to group by: a category or a date. */
+  dimension: string | null;
+  /** Column to add up. Null counts rows instead. */
+  measure: string | null;
+  /** Second grouping for stacked bars or one line per group. */
+  series?: string | null;
+  /** Second number column, for a scatter. */
+  measure2?: string | null;
+  aggregation?: DashAggregation;
+  topN?: number | null;
+}
+
+/**
+ * Build one chart to the user's own specification, rather than from the
+ * suggestions. Returns null when the columns don't make a chart - a scatter
+ * needs two numbers, everything else needs something to group by.
+ */
+export function customChart(
+  request: CustomChartRequest,
+  profiles: readonly ColumnProfile[]
+): DashChart | null {
+  const find = (name: string | null | undefined) =>
+    name ? (profiles.find((p) => p.header === name) ?? null) : null;
+  const dimension = find(request.dimension);
+  const measure = find(request.measure);
+  const measure2 = find(request.measure2);
+  const series = find(request.series);
+  const aggregation: DashAggregation = request.aggregation ?? (measure ? "sum" : "count");
+
+  if (request.kind === "scatter") {
+    if (!measure || !measure2) return null;
+    return {
+      id: ["scatter", null, null, measure.header, measure2.header].join("|"),
+      kind: "scatter",
+      title: `${measure.header} vs ${measure2.header}`,
+      reason: "Your choice.",
+      dimension: null,
+      series: null,
+      measure: measure.header,
+      measure2: measure2.header,
+      aggregation: "sum",
+      timeGrain: null,
+      topN: null,
+    };
+  }
+  if (!dimension) return null;
+
+  const what = measure ? measure.header : "Count";
+  const grain = dimension.kind === "date" ? "month" : null;
+  const title = grain
+    ? `${what} over time${series ? ` by ${series.header}` : ""}`
+    : series
+      ? `${what} by ${dimension.header} and ${series.header}`
+      : `${what} by ${dimension.header}`;
+
+  return {
+    id: [
+      request.kind,
+      dimension.header,
+      series?.header ?? null,
+      measure?.header ?? null,
+      null,
+    ].join("|"),
+    kind: request.kind,
+    title,
+    reason: "Your choice.",
+    dimension: dimension.header,
+    series: series?.header ?? null,
+    measure: measure?.header ?? null,
+    measure2: null,
+    aggregation,
+    timeGrain: grain,
+    topN: request.topN ?? (request.kind === "pie" || request.kind === "doughnut" ? 6 : null),
+  };
+}
+
 /** Up to four headline numbers for the top of the dashboard. */
 export function suggestKpis(profiles: readonly ColumnProfile[], rows: Grid): Kpi[] {
   const measures = rankMeasures(profiles);
@@ -617,15 +696,29 @@ export function buildChartData(
 export function planDashboard(
   headers: string[],
   profiles: ColumnProfile[],
-  rows: Grid
+  rows: Grid,
+  options: PlanOptions = {}
 ): DashboardPlan {
+  // Suggestions are limited to the chosen columns, but the full profile list is
+  // kept, so any column is still available to build a chart from by hand.
+  const usable =
+    options.useColumns && options.useColumns.length > 0
+      ? profiles.filter((profile) => options.useColumns!.indexOf(profile.header) >= 0)
+      : profiles;
   return {
     headers,
     profiles,
-    charts: suggestCharts(profiles, rows),
-    kpis: suggestKpis(profiles, rows),
+    charts: suggestCharts(usable, rows, options.max ?? MAX_CHARTS),
+    kpis: suggestKpis(usable, rows),
     rowCount: rows.length,
   };
+}
+
+export interface PlanOptions {
+  /** How many charts to suggest. */
+  max?: number;
+  /** Only suggest charts built from these columns. Empty means all of them. */
+  useColumns?: readonly string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -803,13 +896,16 @@ export interface DashboardAnalysis {
 }
 
 /** Look at a table and suggest charts and headline numbers for it. */
-export async function analyzeDashboard(ref: DataSourceRef): Promise<DashboardAnalysis> {
+export async function analyzeDashboard(
+  ref: DataSourceRef,
+  options: PlanOptions = {}
+): Promise<DashboardAnalysis> {
   try {
     return await Excel.run(async (context) => {
       const source = await readSource(context, ref);
       if (!source) return { plan: null, sourceName: ref.name, problemsFixed: 0 };
       return {
-        plan: planDashboard(source.headers, source.profiles, source.rows),
+        plan: planDashboard(source.headers, source.profiles, source.rows, options),
         sourceName: source.name,
         problemsFixed: source.problemsFixed,
       };
@@ -962,7 +1058,7 @@ async function drawDashboard(
   const ranges: Excel.Range[] = [];
   let dataRow = 0;
   for (const { chart, data } of drawable) {
-    dataSheet.getRangeByIndexes(dataRow, 0, 1, 1).values = [[chart.title]];
+    writeCell(dataSheet, dataRow, 0, chart.title);
     dataSheet.getRangeByIndexes(dataRow, 0, 1, 1).format.font.bold = true;
     await writeGrid(context, dataSheet, dataRow + 1, 0, data);
     dataSheet.getRangeByIndexes(dataRow + 1, 0, 1, data[0].length).format.font.bold = true;
@@ -983,7 +1079,7 @@ async function drawDashboard(
   }
 
   const title = sheet.getRangeByIndexes(0, 0, 1, 1);
-  title.values = [[config.title]];
+  writeCell(sheet, 0, 0, config.title);
   title.format.font.size = 20;
   title.format.font.bold = true;
   title.format.rowHeight = 30;
@@ -1012,20 +1108,23 @@ async function drawDashboard(
       border.color = "#ffffff";
     }
 
+    // Each band is merged for looks, but written through its top-left cell:
+    // a merged range still reports its full width to Office.js.
     const label = sheet.getRangeByIndexes(place.row, place.column, 1, place.columns);
     label.merge();
-    label.values = [[kpi.label]];
+    writeCell(sheet, place.row, place.column, kpi.label);
     label.format.font.color = "#4b5c57";
     label.format.indentLevel = 1;
 
     const value = sheet.getRangeByIndexes(place.row + 1, place.column, 2, place.columns);
     value.merge();
-    sheet.getRangeByIndexes(place.row + 1, place.column, 1, 1).values = [[kpi.text ?? kpi.value]];
-    if (!kpi.text) {
-      value.numberFormat = Array.from({ length: 2 }, () =>
-        new Array(place.columns).fill(kpi.format)
-      );
-    }
+    writeCell(
+      sheet,
+      place.row + 1,
+      place.column,
+      kpi.text ?? kpi.value,
+      kpi.text ? undefined : kpi.format
+    );
     value.format.font.size = 20;
     value.format.font.bold = true;
     value.format.verticalAlignment = Excel.VerticalAlignment.center;
@@ -1034,10 +1133,9 @@ async function drawDashboard(
     const note = sheet.getRangeByIndexes(place.row + 3, place.column, 1, place.columns);
     note.merge();
     if (kpi.text) {
-      sheet.getRangeByIndexes(place.row + 3, place.column, 1, 1).values = [[kpi.value]];
-      note.numberFormat = [new Array(place.columns).fill(kpi.format)];
+      writeCell(sheet, place.row + 3, place.column, kpi.value, kpi.format);
     } else if (kpi.note) {
-      sheet.getRangeByIndexes(place.row + 3, place.column, 1, 1).values = [[kpi.note]];
+      writeCell(sheet, place.row + 3, place.column, kpi.note);
     }
     note.format.font.color = "#4b5c57";
     note.format.horizontalAlignment = Excel.HorizontalAlignment.left;
