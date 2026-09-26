@@ -23,7 +23,10 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "typecheck": "tsc --noEmit",
-    "sample": "node scripts/make-sample-data.mjs"
+    "sample": "node scripts/make-sample-data.mjs",
+    "build:site": "npm run build && node scripts/build-site.mjs",
+    "manifest:hosted": "node scripts/make-manifest.mjs",
+    "site": "node scripts/build-site.mjs"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.55.1",

@@ -13,3 +13,8 @@ Thumbs.db
 *.swp
 .idea/
 samples/
+
+# Assembled site (landing page + built add-in), created by scripts/build-site.mjs
+public/
+
+.vercel

@@ -4,7 +4,11 @@ const HtmlWebpackPlugin = require("html-webpack-plugin");
 const webpack = require("webpack");
 
 const urlDev = "https://localhost:3100/";
-const urlProd = "https://www.contoso.com/"; // CHANGE THIS TO YOUR PRODUCTION DEPLOYMENT LOCATION
+// The deployed add-in is served from /addin/ on the site, alongside the landing
+// page. scripts/build-site.mjs writes the manifest people actually install; this
+// only affects the copy webpack leaves in dist/.
+const siteBase = (process.env.MEX_SITE_BASE || "https://mex-automate.vercel.app").replace(/\/+$/, "");
+const urlProd = `${siteBase}/addin/`;
 
 async function getHttpsOptions() {
   const httpsOptions = await devCerts.getHttpsServerOptions();
