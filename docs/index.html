@@ -1011,7 +1011,7 @@ footer p { margin: 0; max-width: 60ch; }
 
       <article class="feature">
         <div>
-          <div class="feature-name"><span class="spec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M12 17v3M8.5 20h7"/><path d="M7 13.5v-3M11 13.5v-6M15 13.5v-4.5"/></svg></span><h3>And now: the deck, from the same spreadsheet</h3></div>
+          <div class="feature-name"><span class="spec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M12 17v3M8.5 20h7"/><path d="M7 13.5v-3M11 13.5v-6M15 13.5v-4.5"/></svg></span><h3>And now: the deck, in about a minute</h3></div>
           <p>
             The monthly reporting deck is the other half of the job. Build it once by hand, then rebuild it every
             month because the numbers moved. Copy-paste takes an hour and is wrong the moment anything changes;
@@ -1022,6 +1022,13 @@ footer p { margin: 0; max-width: 60ch; }
             headline numbers, a slide per chart with the plain-English finding already written underneath, and a
             closing slide of what the numbers show. Same engine as the dashboards, so a messy export works
             directly and the deck says exactly what a dashboard from the same file would say.
+          </p>
+          <p>
+            <strong>Or just paste what you have.</strong> Notes from an email, an outline, a list, a table copied
+            out of Excel. MEx reads the structure the way you wrote it: a short line with a list under it is a
+            slide title, an indented line is a sub-point, numbered lists stay numbered, a long list becomes two
+            slides, and a pasted table becomes a table <em>and</em> a chart of its numbers. Every word on the
+            slides is a word you pasted — nothing is invented, so there is nothing to fact-check.
           </p>
           <p>
             <strong>Charts are drawn, not pasted.</strong> PowerPoint has no way for an add-in to insert a chart,
@@ -1037,10 +1044,10 @@ footer p { margin: 0; max-width: 60ch; }
           </p>
           <p class="mini-note">Only the shapes MEx drew are replaced, so a note or an arrow you added to a slide survives the refresh. Slides this month's data can't produce are left alone rather than deleted — that's worth seeing, not hiding.</p>
         </div>
-        <div class="cells" aria-label="A deck being built">
-          <div class="cellset before"><span>sales-march.xlsx</span><span class="r">2,481 rows</span><span>titles, totals,</span><span>$ as text</span></div>
+        <div class="cells" aria-label="Pasted notes becoming slides">
+          <div class="cellset before"><span>Where we are</span><span>- Revenue up 14%</span><span>- Two new clients</span><span>Region  Q1  Q2</span></div>
           <span class="arrow" aria-hidden="true">→</span>
-          <div class="cellset after"><span>8 slides</span><span class="r">4 headline numbers</span><span>5 charts</span><span>editable shapes</span></div>
+          <div class="cellset after"><span>Title slide</span><span>Where we are</span><span>Revenue by region</span><span>+ a chart of it</span></div>
         </div>
       </article>
 

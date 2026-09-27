@@ -6,9 +6,10 @@ Two Office task pane add-ins from one codebase.
 report wrong, cleaning messy exports, combining sheets and files, building dashboards, checking a
 workbook for what makes it slow, and remembering a month-end routine so next month is one command.
 
-**In PowerPoint**, it builds the reporting deck from a spreadsheet - cleaning the file, choosing
-what is worth showing, and laying out slides whose charts are editable PowerPoint shapes rather
-than pasted pictures. Next month, one click redraws them.
+**In PowerPoint**, it builds the deck. Paste your notes and it reads their structure into slides,
+or point it at a spreadsheet and it cleans the file, chooses what is worth showing, and lays out the
+report - with charts drawn as editable PowerPoint shapes rather than pasted pictures. Next month,
+one click redraws them.
 
 Everything runs client-side inside the Excel add-in sandbox. There is no backend, no account, no
 AI/API cost, and no data leaves the machine — including the .xlsx and .csv files you merge, which
@@ -220,9 +221,28 @@ PivotTables need, without Power Query.
   that is missing it says so.
 
 ### The deck (PowerPoint)
-`Home → Build deck` in PowerPoint. Pick a spreadsheet and MEx builds the slides: a title, the
-headline numbers, a slide per chart with the plain-English finding under it, and a closing slide of
-what the numbers show. **Refresh** redraws them next month from the new file.
+`Home → Build deck` in PowerPoint. Two ways in.
+
+**Paste what you have.** Notes from an email, an outline, a list, a table copied out of Excel. The
+structure is read rather than asked for, using the conventions people already write in:
+
+- A short, unpunctuated line with a list under it is a slide title. So is a `#` heading, and a line
+  ending in a colon.
+- `-`, `*`, `•`, `–`, `+` are bullets; `1.` and `1)` are a numbered list, and stay numbered.
+- An indented line is a sub-point.
+- A blank line ends a thought; a list longer than six points becomes two slides, the second marked
+  *(cont.)*.
+- A run of tab-separated or pipe-separated lines is a table — and if it has a label column and a
+  numeric one, you get the table **and** a chart of it, drawn by the same code the spreadsheet decks
+  use. Commas alone are not a table: "Widgets, gadgets and sprockets" is one sentence.
+- A line that is a table row is never read as a title, however short it is.
+
+No model is involved, so the same paste always gives the same deck, every word on a slide is a word
+that was pasted, and when it reads something wrongly you can see why and change one line.
+
+**Or build it from a spreadsheet.** Pick the file and MEx builds a title, the headline numbers, a
+slide per chart with the plain-English finding under it, and a closing slide of what the numbers
+show. **Refresh** redraws them next month from the new file.
 
 - **The same engine as the dashboards.** The file goes through `tidyTable`, its columns are
   profiled, and `planDashboard` chooses the charts — so a messy export works directly and the deck
@@ -366,6 +386,8 @@ src/
       guards.ts                Data validation rules derived from the column profiles (pure)
       guardsSheet.ts           Puts the rules on the cells
       deck.ts                  Slide layout and charts drawn as shapes (pure)
+      outline.ts               Reading pasted notes as a structured outline (pure)
+      deckFromText.ts          Pasted text becomes a planned deck (pure)
       deckFromWorkbook.ts      A picked spreadsheet becomes a planned deck (pure)
       deckSlides.ts            The PowerPoint driver: slides, shapes, tags, refresh
       commands.ts              The assistant's command language (pure)
@@ -380,7 +402,7 @@ src/
       workbookReader.ts        .xlsx / .csv parsing
       types.ts                 Shared domain types
     theme.ts                   The website's jade palette and type, as a Fluent theme
-tests/                         Jest unit tests (567)
+tests/                         Jest unit tests (604)
 manifest.xml                   Excel add-in manifest
 manifest-powerpoint.xml        PowerPoint add-in manifest
 ```
@@ -395,7 +417,7 @@ write back. Every driver returns the same `OperationResult` shape, which is what
 npm test
 ```
 
-567 unit tests cover the pure logic, including the mistake detectors and the
+604 unit tests cover the pure logic, including the mistake detectors and the
 command parser, table detection and every kind of repair on a
 deliberately nasty export, chart suggestion, time bucketing, chart data and dashboard layout, and
 regression tests for bugs caught on the sample sheet. Also covered: grid transforms, dedupe keying, date parsing and Excel serial

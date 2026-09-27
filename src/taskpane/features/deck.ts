@@ -89,7 +89,7 @@ export type ShapeSpec =
       weight: number;
     };
 
-export type SlideKind = "title" | "numbers" | "chart" | "insights";
+export type SlideKind = "title" | "numbers" | "chart" | "insights" | "points" | "table";
 
 export interface SlideSpec {
   kind: SlideKind;
@@ -594,6 +594,198 @@ export interface KpiSpec {
   label: string;
   value: string;
   note: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Slides made of words
+// ---------------------------------------------------------------------------
+
+/** Text sizes step down as a slide gets fuller, rather than overflowing it. */
+function bulletSize(count: number): number {
+  if (count <= 3) return 20;
+  if (count <= 5) return 18;
+  return 16;
+}
+
+export interface BulletSpec {
+  text: string;
+  level: number;
+  number: number | null;
+}
+
+/**
+ * A slide of points. The bullet marks are drawn rather than typed, so a
+ * sub-point can be indented and dimmed without depending on PowerPoint's own
+ * list formatting, which varies with whatever template the deck is using.
+ */
+export function bulletSlide(
+  title: string,
+  bullets: readonly BulletSpec[],
+  options: { prefix: string; subtitle?: string | null; continued?: boolean } = { prefix: "MEx_pts" }
+): SlideSpec {
+  const prefix = options.prefix;
+  const heading_ = options.continued ? `${title} (cont.)` : title;
+  const shapes = heading(heading_, options.subtitle ?? null, prefix);
+
+  const size = bulletSize(bullets.length);
+  const lineHeight = size * 2.5;
+  const available = SLIDE.height - BODY_TOP - MARGIN;
+  const step = Math.min(lineHeight, bullets.length > 0 ? available / bullets.length : lineHeight);
+
+  bullets.forEach((bullet, index) => {
+    const top = BODY_TOP + step * index;
+    const indent = bullet.level > 0 ? 34 : 0;
+
+    if (bullet.number !== null) {
+      shapes.push({
+        kind: "text",
+        name: `${prefix}_num_${index}`,
+        box: { left: MARGIN + indent, top, width: 30, height: step },
+        text: `${bullet.number}.`,
+        style: { size, bold: true, color: INK.accent, align: "left" },
+      });
+    } else {
+      // A small square reads as a bullet at any size and needs no font support.
+      shapes.push({
+        kind: "rect",
+        name: `${prefix}_dot_${index}`,
+        box: {
+          left: MARGIN + indent + (bullet.level > 0 ? 4 : 0),
+          top: top + size * 0.45,
+          width: bullet.level > 0 ? 6 : 9,
+          height: bullet.level > 0 ? 6 : 9,
+        },
+        fill: bullet.level > 0 ? INK.faint : INK.accent,
+      });
+    }
+
+    shapes.push({
+      kind: "text",
+      name: `${prefix}_text_${index}`,
+      box: {
+        left: MARGIN + indent + (bullet.number !== null ? 32 : 22),
+        top,
+        width: SLIDE.width - MARGIN * 2 - indent - 32,
+        height: step,
+      },
+      text: bullet.text,
+      style: {
+        size: bullet.level > 0 ? size - 2 : size,
+        color: bullet.level > 0 ? INK.body : INK.heading,
+        align: "left",
+      },
+    });
+  });
+
+  return {
+    kind: "points",
+    title: heading_,
+    tag: { chartId: "", kind: "points", source: options.subtitle ?? "" },
+    shapes,
+  };
+}
+
+export interface TableSpec {
+  headers: string[];
+  rows: string[][];
+}
+
+/** Rows beyond this will not fit on a slide anyone can read. */
+export const MAX_TABLE_ROWS = 10;
+
+/**
+ * A table drawn as shapes: a header band, banded rows and text.
+ *
+ * PowerPoint's own table object needs PowerPointApi 1.8, which is newer than
+ * this add-in requires, and a drawn table can be styled to match the rest of
+ * the deck. Cells are text boxes, so every value is still selectable and
+ * editable.
+ */
+export function tableSlide(
+  title: string,
+  table: TableSpec,
+  options: { prefix: string; subtitle?: string | null } = { prefix: "MEx_tbl" }
+): SlideSpec {
+  const prefix = options.prefix;
+  const shapes = heading(title, options.subtitle ?? null, prefix);
+
+  const rows = table.rows.slice(0, MAX_TABLE_ROWS);
+  const columns = Math.max(1, table.headers.length);
+  const width = (SLIDE.width - MARGIN * 2) / columns;
+  const rowHeight = Math.min(34, (SLIDE.height - BODY_TOP - MARGIN - 30) / (rows.length + 1));
+  const size = rowHeight > 28 ? 13 : 11;
+
+  // The header band, then one line under each row: enough structure to read a
+  // table by, without drawing a box round every cell.
+  shapes.push({
+    kind: "rect",
+    name: `${prefix}_head`,
+    box: { left: MARGIN, top: BODY_TOP, width: SLIDE.width - MARGIN * 2, height: rowHeight },
+    fill: INK.panel,
+  });
+
+  table.headers.forEach((header, column) => {
+    shapes.push({
+      kind: "text",
+      name: `${prefix}_h_${column}`,
+      box: {
+        left: MARGIN + width * column + 8,
+        top: BODY_TOP + 4,
+        width: width - 16,
+        height: rowHeight - 8,
+      },
+      text: header,
+      style: { size, bold: true, color: INK.heading, align: column === 0 ? "left" : "right" },
+    });
+  });
+
+  rows.forEach((row, index) => {
+    const top = BODY_TOP + rowHeight * (index + 1);
+    shapes.push({
+      kind: "line",
+      name: `${prefix}_rule_${index}`,
+      from: { x: MARGIN, y: top + rowHeight },
+      to: { x: SLIDE.width - MARGIN, y: top + rowHeight },
+      color: INK.rule,
+      weight: 0.75,
+    });
+    for (let column = 0; column < columns; column += 1) {
+      shapes.push({
+        kind: "text",
+        name: `${prefix}_c_${index}_${column}`,
+        box: {
+          left: MARGIN + width * column + 8,
+          top: top + 4,
+          width: width - 16,
+          height: rowHeight - 8,
+        },
+        text: row[column] ?? "",
+        style: { size, color: INK.body, align: column === 0 ? "left" : "right" },
+      });
+    }
+  });
+
+  if (table.rows.length > rows.length) {
+    shapes.push({
+      kind: "text",
+      name: `${prefix}_more`,
+      box: {
+        left: MARGIN,
+        top: BODY_TOP + rowHeight * (rows.length + 1) + 8,
+        width: SLIDE.width - MARGIN * 2,
+        height: 20,
+      },
+      text: `and ${table.rows.length - rows.length} more rows`,
+      style: { size: 11, color: INK.faint, align: "left" },
+    });
+  }
+
+  return {
+    kind: "table",
+    title,
+    tag: { chartId: "", kind: "table", source: options.subtitle ?? "" },
+    shapes,
+  };
 }
 
 function titleSlide(title: string, subtitle: string, source: string): SlideSpec {

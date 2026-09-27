@@ -16,7 +16,10 @@ import {
   Input,
   makeStyles,
   Spinner,
+  Tab,
+  TabList,
   Text,
+  Textarea,
   tokens,
 } from "@fluentui/react-components";
 import {
@@ -29,6 +32,8 @@ import {
 } from "@fluentui/react-icons";
 
 import { DeckPreview, planDeckFromGrid } from "../features/deckFromWorkbook";
+import { planDeckFromText } from "../features/deckFromText";
+import type { DeckPlan } from "../features/deck";
 import {
   buildDeck,
   canRotateShapes,
@@ -101,6 +106,12 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase200,
   },
   hidden: { display: "none" },
+  notes: {
+    minHeight: "190px",
+    fontFamily: tokens.fontFamilyBase,
+    fontSize: tokens.fontSizeBase300,
+    lineHeight: tokens.lineHeightBase300,
+  },
 });
 
 interface Picked {
@@ -111,10 +122,30 @@ interface Picked {
   preview: DeckPreview;
 }
 
+/** The two ways content gets in: typed or pasted, or read out of a file. */
+type Source = "paste" | "file";
+
+/** Shows the conventions by demonstrating them, which beats explaining them. */
+const PLACEHOLDER = `Q1 board update
+
+Where we are
+- Revenue up 14% on last quarter
+- Two new enterprise clients
+
+Where we are going
+1. Hire two engineers
+2. Open the Leeds office
+    - Lease signed in June
+
+Revenue by region
+(paste a table from Excel here)`;
+
 const DeckPanel: React.FC = () => {
   const styles = useStyles();
   const fileInput = React.useRef<HTMLInputElement | null>(null);
 
+  const [source, setSource] = React.useState<Source>("paste");
+  const [notes, setNotes] = React.useState("");
   const [picked, setPicked] = React.useState<Picked | null>(null);
   const [title, setTitle] = React.useState("");
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -122,6 +153,15 @@ const DeckPanel: React.FC = () => {
   const [builtSlides, setBuiltSlides] = React.useState<number>(0);
 
   const supported = isDeckSupported();
+
+  // Re-read on every keystroke: it is a few hundred lines of string work, and
+  // watching the slide list form as you type is the whole point.
+  const pasted = React.useMemo(
+    () => (notes.trim() === "" ? null : planDeckFromText(notes, { title: title.trim() || undefined })),
+    [notes, title]
+  );
+
+  const active = source === "paste" ? pasted : picked?.preview ?? null;
 
   const countBuilt = React.useCallback(async () => {
     setBuiltSlides((await findBuiltSlides()).length);
@@ -171,8 +211,9 @@ const DeckPanel: React.FC = () => {
     }
   };
 
-  /** Re-plans from the grid, so an edited title reaches the slides. */
-  const planNow = (): DeckPreview | null => {
+  /** Re-plans with the current title, so an edit to it reaches the slides. */
+  const planNow = (): { plan: DeckPlan } | null => {
+    if (source === "paste") return pasted;
     if (!picked) return null;
     if (title.trim() === "" || title.trim() === picked.preview.plan.title) return picked.preview;
     return (
@@ -212,14 +253,23 @@ const DeckPanel: React.FC = () => {
     <div className={styles.root}>
       <div>
         <Text as="h1" className={styles.lead}>
-          Build the deck from your spreadsheet
+          {source === "paste" ? "Paste it, and I'll make the slides" : "Build the deck from your spreadsheet"}
         </Text>
         <Text className={styles.hint}>
-          Pick the file, and MEx cleans it, works out what is worth showing, and lays out the
-          slides. Charts are drawn as ordinary PowerPoint shapes, so you can recolour and move
-          anything afterwards. The file is read on this computer and never uploaded.
+          {source === "paste"
+            ? "Notes, an outline, a list, a table copied out of Excel — whatever you have. MEx reads the structure and lays it out. Every word on the slides is a word you pasted; nothing is invented."
+            : "Pick the file, and MEx cleans it, works out what is worth showing, and lays out the slides. It is read on this computer and never uploaded."}
         </Text>
       </div>
+
+      <TabList
+        selectedValue={source}
+        onTabSelect={(_event, data) => setSource(data.value as Source)}
+        size="small"
+      >
+        <Tab value="paste">Paste notes</Tab>
+        <Tab value="file">From a spreadsheet</Tab>
+      </TabList>
 
       {!supported ? (
         <div className={styles.card}>
@@ -242,7 +292,25 @@ const DeckPanel: React.FC = () => {
         }}
       />
 
-      <div className={styles.card}>
+      {source === "paste" ? (
+        <div className={styles.card}>
+          <Textarea
+            value={notes}
+            resize="vertical"
+            textarea={{ className: styles.notes }}
+            placeholder={PLACEHOLDER}
+            onChange={(_event, data) => setNotes(data.value)}
+          />
+          <Text className={styles.hint}>
+            A short line with a list under it becomes a slide title. Indent a line to make it a
+            sub-point. Numbered lists stay numbered. Paste a table straight out of Excel and you
+            get the table <em>and</em> a chart of it.
+          </Text>
+          {pasted ? <Text className={styles.hint}>{pasted.summary}</Text> : null}
+        </div>
+      ) : null}
+
+      <div className={styles.card} style={{ display: source === "file" ? undefined : "none" }}>
         <div className={styles.fileRow}>
           <Button
             appearance={picked ? "outline" : "primary"}
@@ -271,22 +339,24 @@ const DeckPanel: React.FC = () => {
         )}
       </div>
 
-      {picked ? (
+      {active ? (
         <div className={styles.card}>
           <Text weight="semibold">Deck title</Text>
-          <Input value={title} onChange={(_event, data) => setTitle(data.value)} />
-          <Text weight="semibold">
-            {picked.preview.plan.slides.length} slides, in this order
-          </Text>
+          <Input
+            value={title}
+            placeholder={active.plan.title}
+            onChange={(_event, data) => setTitle(data.value)}
+          />
+          <Text weight="semibold">{active.plan.slides.length} slides, in this order</Text>
           <ul className={styles.slides}>
-            {picked.preview.plan.slides.map((slide, index) => (
+            {active.plan.slides.map((slide, index) => (
               <li key={`${slide.kind}-${index}`} className={styles.slide}>
                 <span className={styles.number}>{index + 1}</span>
                 <span>{slide.title}</span>
               </li>
             ))}
           </ul>
-          {picked.preview.chartsLeftOut > 0 ? (
+          {source === "file" && picked && picked.preview.chartsLeftOut > 0 ? (
             <Text className={styles.hint}>
               {picked.preview.chartsLeftOut} more chart
               {picked.preview.chartsLeftOut === 1 ? " was" : "s were"} suggested and left out to
@@ -300,14 +370,14 @@ const DeckPanel: React.FC = () => {
         <Button
           appearance="primary"
           icon={<SlideAdd20Regular />}
-          disabled={!picked || !supported || busy !== null}
+          disabled={!active || !supported || busy !== null}
           onClick={() => void build()}
         >
           Add the slides
         </Button>
         <Button
           icon={<ArrowSync20Regular />}
-          disabled={!picked || builtSlides === 0 || busy !== null}
+          disabled={!active || builtSlides === 0 || busy !== null}
           onClick={() => void refresh()}
         >
           Refresh {builtSlides > 0 ? `${builtSlides} slides` : ""}
