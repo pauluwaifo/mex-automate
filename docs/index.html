@@ -1009,6 +1009,41 @@ footer p { margin: 0; max-width: 60ch; }
         </div>
       </article>
 
+      <article class="feature">
+        <div>
+          <div class="feature-name"><span class="spec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M12 17v3M8.5 20h7"/><path d="M7 13.5v-3M11 13.5v-6M15 13.5v-4.5"/></svg></span><h3>And now: the deck, from the same spreadsheet</h3></div>
+          <p>
+            The monthly reporting deck is the other half of the job. Build it once by hand, then rebuild it every
+            month because the numbers moved. Copy-paste takes an hour and is wrong the moment anything changes;
+            paste-link breaks when the workbook is renamed, moved, or its ranges shift.
+          </p>
+          <p>
+            <strong>MEx Automate for PowerPoint</strong> takes the spreadsheet and builds the slides: a title, the
+            headline numbers, a slide per chart with the plain-English finding already written underneath, and a
+            closing slide of what the numbers show. Same engine as the dashboards, so a messy export works
+            directly and the deck says exactly what a dashboard from the same file would say.
+          </p>
+          <p>
+            <strong>Charts are drawn, not pasted.</strong> PowerPoint has no way for an add-in to insert a chart,
+            so instead of a screenshot you get ordinary PowerPoint shapes — rectangles, lines, text — in your own
+            theme. Recolour them, move them, animate them. They stay sharp on a projector and a screen reader can
+            read them.
+          </p>
+          <p>
+            <strong>Next month, press Refresh.</strong> Each slide remembers <em>what it shows</em> — "revenue by
+            region, from the sheet named Sales" — not a path to a file. Rename the workbook, move it, add four
+            hundred rows, reorder the columns: pick the new file and the slides redraw. Nothing to relink, because
+            nothing was ever linked.
+          </p>
+          <p class="mini-note">Only the shapes MEx drew are replaced, so a note or an arrow you added to a slide survives the refresh. Slides this month's data can't produce are left alone rather than deleted — that's worth seeing, not hiding.</p>
+        </div>
+        <div class="cells" aria-label="A deck being built">
+          <div class="cellset before"><span>sales-march.xlsx</span><span class="r">2,481 rows</span><span>titles, totals,</span><span>$ as text</span></div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="cellset after"><span>8 slides</span><span class="r">4 headline numbers</span><span>5 charts</span><span>editable shapes</span></div>
+        </div>
+      </article>
+
       <h3 class="also-head">Also in the box</h3>
       <div class="also">
         <div><h4>Months across the top?</h4><p>Turn a crosstab into rows a chart can actually use — Power Query's unpivot, in one command.</p></div>
@@ -1029,7 +1064,7 @@ footer p { margin: 0; max-width: 60ch; }
       <div class="section-head">
         <span class="eyebrow">Get started</span>
         <h2 id="install-title">Install it in about a minute.</h2>
-        <p>It's free, there's no account, and nothing to pay for. Pick the line that matches where you use Excel.</p>
+        <p>It's free, there's no account, and nothing to pay for. One install sets up both the Excel add-in and the PowerPoint one.</p>
       </div>
 
       <div class="route-main">
@@ -1046,35 +1081,36 @@ footer p { margin: 0; max-width: 60ch; }
           <button class="copy" type="button" data-copy="#installCmd">Copy</button>
         </div>
         <ol class="route-steps">
-          <li><b>Close Excel</b> if it's open</li>
+          <li><b>Close Excel and PowerPoint</b> if they're open</li>
           <li>Run the line above</li>
-          <li>Open Excel — <b>Home › Automate</b></li>
+          <li>Excel — <b>Home › Automate</b></li>
+          <li>PowerPoint — <b>Home › Build deck</b></li>
         </ol>
       </div>
 
       <div class="routes">
         <div class="route">
-          <h4>Excel on the web</h4>
+          <h4>Excel or PowerPoint on the web</h4>
           <a class="dl" href="manifest.xml" download>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 19h16"/></svg>
             Download manifest.xml
           </a>
           <ol>
-            <li>Open any workbook at <span class="kbd">excel.new</span></li>
+            <li>Open any workbook at <span class="kbd">excel.new</span> (or a deck at <span class="kbd">powerpoint.new</span>, with <a href="manifest-powerpoint.xml" download>the PowerPoint manifest</a>)</li>
             <li><span class="kbd">Home › Add-ins › More Settings</span></li>
             <li>Choose <strong>Upload My Add-in</strong> and pick the file you just downloaded</li>
           </ol>
         </div>
         <div class="route">
-          <h4>Excel on a Mac</h4>
+          <h4>Office on a Mac</h4>
           <a class="dl" href="manifest.xml" download>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 19h16"/></svg>
             Download manifest.xml
           </a>
           <ol>
             <li>In Finder press <span class="kbd">⌘⇧G</span></li>
-            <li>Go to <span class="kbd">~/Library/Containers/com.microsoft.Excel/Data/Documents/wef</span></li>
-            <li>Drop the file in there, then restart Excel</li>
+            <li>Go to <span class="kbd">~/Library/Containers/com.microsoft.Excel/Data/Documents/wef</span> (for PowerPoint, <span class="kbd">com.microsoft.Powerpoint</span> and <a href="manifest-powerpoint.xml" download>its manifest</a>)</li>
+            <li>Drop the file in there, then restart the app</li>
           </ol>
         </div>
       </div>
@@ -1101,13 +1137,13 @@ footer p { margin: 0; max-width: 60ch; }
           <p>The Windows installer is a short, readable PowerShell script. You can
             <a href="install.ps1">read it first</a> — it's about a hundred lines and half of them are comments. It does two things:</p>
           <ol>
-            <li>Downloads <span class="kbd">manifest.xml</span> — a small XML file naming the add-in and where its pane lives — into <span class="kbd">%LOCALAPPDATA%\MEx Automate</span>.</li>
-            <li>Writes one registry value under <span class="kbd">HKCU\Software\Microsoft\Office\16.0\WEF\Developer</span> so Excel knows to load it. <span class="kbd">HKCU</span> means your user account only.</li>
+            <li>Downloads two manifests — small XML files naming each add-in and where its pane lives — into <span class="kbd">%LOCALAPPDATA%\MEx Automate</span>.</li>
+            <li>Writes one registry value each under <span class="kbd">HKCU\Software\Microsoft\Office\16.0\WEF\Developer</span>, so Excel and PowerPoint know to load them. <span class="kbd">HKCU</span> means your user account only.</li>
           </ol>
           <p style="margin-top: 10px">
-            To remove it, run <span class="kbd">irm https://mex-automate.vercel.app/uninstall.ps1 | iex</span>. That deletes both. Any sheets,
-            dashboards and formulas MEx built stay put — they're ordinary Excel content, and they keep working with the
-            add-in gone.
+            To remove them, run <span class="kbd">irm https://mex-automate.vercel.app/uninstall.ps1 | iex</span>. That deletes the lot. Any
+            sheets, dashboards, formulas and slides MEx built stay put — they're ordinary Excel and PowerPoint content,
+            and they keep working with the add-in gone.
           </p>
         </div>
       </details>

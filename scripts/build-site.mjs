@@ -12,7 +12,7 @@
 // Run `npm run build` first: this script copies dist/, it does not create it.
 import fs from "node:fs";
 import path from "node:path";
-import { hostedManifest, normalizeBase, DEFAULT_BASE } from "./make-manifest.mjs";
+import { hostedManifest, MANIFESTS, normalizeBase, DEFAULT_BASE } from "./make-manifest.mjs";
 
 const OUT = "public";
 
@@ -58,11 +58,17 @@ fs.mkdirSync(OUT, { recursive: true });
 copyDir("docs", OUT);
 copyDir("dist", path.join(OUT, "addin"));
 
-// The manifest webpack copied into dist/ is replaced by the generated one, so
-// there is a single source of truth for the hosted URLs and the hosted id.
-const hosted = hostedManifest(fs.readFileSync("manifest.xml", "utf8"), base);
-fs.writeFileSync(path.join(OUT, "manifest.xml"), hosted);
-fs.writeFileSync(path.join(OUT, "addin", "manifest.xml"), hosted);
+// The manifest webpack copied into dist/ is replaced by the generated ones, so
+// there is a single source of truth for the hosted URLs and the hosted ids.
+// Both add-ins are served from one deployment and share the same bundle; the
+// pane looks at which host it is running in and shows the right screen.
+let hosted = "";
+for (const manifest of MANIFESTS) {
+  const built = hostedManifest(fs.readFileSync(manifest.source, "utf8"), base, { id: manifest.id });
+  fs.writeFileSync(path.join(OUT, manifest.hosted), built);
+  fs.writeFileSync(path.join(OUT, "addin", manifest.hosted), built);
+  if (manifest.app === "Excel") hosted = built;
+}
 
 for (const script of ["install.ps1", "uninstall.ps1"]) {
   fs.copyFileSync(path.join("install", script), path.join(OUT, script));
@@ -77,6 +83,7 @@ fs.writeFileSync(
       version: /<Version>([^<]+)<\/Version>/.exec(hosted)?.[1] ?? "unknown",
       base,
       manifest: `${base}/manifest.xml`,
+      powerpointManifest: `${base}/manifest-powerpoint.xml`,
       built: new Date().toISOString(),
     },
     null,

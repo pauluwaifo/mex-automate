@@ -14,8 +14,21 @@ import fs from "node:fs";
 import path from "node:path";
 
 export const HOSTED_ID = "fcf30730-1db1-4555-979a-87d048d8c363";
+/** The PowerPoint add-in is a separate registration, so it has its own id. */
+export const HOSTED_POWERPOINT_ID = "6295c215-900a-4867-85a9-2a9293d10f98";
 export const DEV_BASE = "https://localhost:3100";
 export const DEFAULT_BASE = "https://mex-automate.vercel.app";
+
+/** The two manifests this project ships, and what each is called when hosted. */
+export const MANIFESTS = [
+  { source: "manifest.xml", hosted: "manifest.xml", id: HOSTED_ID, app: "Excel" },
+  {
+    source: "manifest-powerpoint.xml",
+    hosted: "manifest-powerpoint.xml",
+    id: HOSTED_POWERPOINT_ID,
+    app: "PowerPoint",
+  },
+];
 
 /** Reads --name value pairs, falling back to the environment then a default. */
 function arg(argv, name, fallback) {

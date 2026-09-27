@@ -1,8 +1,14 @@
 # MEx Automate
 
-An Excel task pane add-in that automates repetitive spreadsheet work: cleaning data, merging
-sheets and files, building charts and summary tables, filling formula patterns, and refreshing
-report templates.
+Two Office task pane add-ins from one codebase.
+
+**In Excel**, it automates repetitive spreadsheet work: finding the mistakes that quietly make a
+report wrong, cleaning messy exports, combining sheets and files, building dashboards, checking a
+workbook for what makes it slow, and remembering a month-end routine so next month is one command.
+
+**In PowerPoint**, it builds the reporting deck from a spreadsheet - cleaning the file, choosing
+what is worth showing, and laying out slides whose charts are editable PowerPoint shapes rather
+than pasted pictures. Next month, one click redraws them.
 
 Everything runs client-side inside the Excel add-in sandbox. There is no backend, no account, no
 AI/API cost, and no data leaves the machine — including the .xlsx and .csv files you merge, which
@@ -213,6 +219,33 @@ PivotTables need, without Power Query.
   typing, and says if something looks wrong. It never changes anything. Needs ExcelApi 1.7; where
   that is missing it says so.
 
+### The deck (PowerPoint)
+`Home → Build deck` in PowerPoint. Pick a spreadsheet and MEx builds the slides: a title, the
+headline numbers, a slide per chart with the plain-English finding under it, and a closing slide of
+what the numbers show. **Refresh** redraws them next month from the new file.
+
+- **The same engine as the dashboards.** The file goes through `tidyTable`, its columns are
+  profiled, and `planDashboard` chooses the charts — so a messy export works directly and the deck
+  says what a dashboard built from the same file would say.
+- **Charts are drawn, not pasted.** There is no chart object in the PowerPoint JavaScript API at
+  all, so instead of a picture of an Excel chart you get native shapes in the deck's own theme:
+  rectangles for bars, a stacked bar for a share, text for labels. Editable, sharp on a projector,
+  and readable by a screen reader.
+- **Trends degrade honestly.** A connector added through the API fills its bounding box one way, so
+  a rising line segment cannot be drawn the right way up without rotation (PowerPointApi 1.10).
+  Where rotation is missing, a trend is drawn as columns — which answers the same question and is
+  never wrong — rather than as a line sloping the wrong way.
+- **Refresh cannot break the way paste-link does.** Each slide stores *what it shows* in a slide
+  tag — the chart id and where the numbers came from — not a path to a workbook. Rename the file,
+  move it, add four hundred rows, reorder the columns: pick it again and the slides redraw.
+- Only shapes named `MEx_` are replaced, so anything you added to those slides by hand survives.
+  Slides the new data cannot produce are left alone rather than deleted.
+- The add-in cannot reach your file system, so you pick the workbook each time. It is parsed in the
+  task pane and never uploaded.
+
+Needs PowerPointApi 1.4 (PowerPoint on the web, or Microsoft 365 on Windows from 2208). The pane
+says so plainly where that is missing rather than failing.
+
 ### Quick clean-ups
 - **Remove duplicate rows** — compare whole rows or only chosen key columns, optionally ignoring
   case and spacing. Either blanks the tail of the range or deletes whole worksheet rows.
@@ -304,6 +337,7 @@ src/
       ReviewPanel.tsx          ...and a screen per tool, for people who prefer buttons
       TidyPanel.tsx
       DashboardPanel.tsx
+      DeckPanel.tsx            The PowerPoint pane: pick a file, build the deck, refresh it
       CleanPanel.tsx
       MergePanel.tsx
       ChartPanel.tsx
@@ -327,6 +361,13 @@ src/
       explain.ts               Formula parser and plain-English describer (pure)
       explainSheet.ts          Reads the selected cell for the explainer
       watch.ts                 Re-checks the cells you edit, while you edit them
+      health.ts                Why a workbook is slow and what in it is fragile (pure)
+      healthSheet.ts           Scans every sheet; narrows ranges, clears the empty tail
+      guards.ts                Data validation rules derived from the column profiles (pure)
+      guardsSheet.ts           Puts the rules on the cells
+      deck.ts                  Slide layout and charts drawn as shapes (pure)
+      deckFromWorkbook.ts      A picked spreadsheet becomes a planned deck (pure)
+      deckSlides.ts            The PowerPoint driver: slides, shapes, tags, refresh
       commands.ts              The assistant's command language (pure)
       assistant.ts             Runs a command and answers with structured messages
       merge.ts                 Header planning + merge drivers
@@ -339,8 +380,9 @@ src/
       workbookReader.ts        .xlsx / .csv parsing
       types.ts                 Shared domain types
     theme.ts                   The website's jade palette and type, as a Fluent theme
-tests/                         Jest unit tests (473)
-manifest.xml                   Add-in manifest
+tests/                         Jest unit tests (567)
+manifest.xml                   Excel add-in manifest
+manifest-powerpoint.xml        PowerPoint add-in manifest
 ```
 
 Each feature module is split the same way: **pure functions over plain data** at the top (unit
@@ -353,7 +395,7 @@ write back. Every driver returns the same `OperationResult` shape, which is what
 npm test
 ```
 
-473 unit tests cover the pure logic, including the mistake detectors and the
+567 unit tests cover the pure logic, including the mistake detectors and the
 command parser, table detection and every kind of repair on a
 deliberately nasty export, chart suggestion, time bucketing, chart data and dashboard layout, and
 regression tests for bugs caught on the sample sheet. Also covered: grid transforms, dedupe keying, date parsing and Excel serial

@@ -29,6 +29,7 @@ export default [
         ...globals.browser,
         // Injected by office.js at runtime rather than imported.
         Excel: "readonly",
+        PowerPoint: "readonly",
         Office: "readonly",
         OfficeExtension: "readonly",
         // Provided by webpack for hot module replacement.
