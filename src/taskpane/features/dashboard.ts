@@ -27,6 +27,7 @@ import {
 import { CellValue, Grid, OperationResult } from "../shared/types";
 import type { DataSourceRef } from "./charts";
 import { excelSerialToDate, parseFlexibleDate, dateToExcelSerial } from "./dataCleaning";
+import { categoryInsights, Insight, pickInsights, trendInsights } from "./insights";
 import {
   cleanText,
   ColumnProfile,
@@ -793,6 +794,61 @@ export function layoutDashboard(
 }
 
 // ---------------------------------------------------------------------------
+// Reading the dashboard out loud
+// ---------------------------------------------------------------------------
+
+/**
+ * Turns the charts of a plan into sentences: what the trend did, who leads, how
+ * concentrated the total is.
+ *
+ * It reads the same aggregated numbers the charts are drawn from, so a bullet can
+ * never disagree with the chart above it. Charts with two groupings are skipped -
+ * "revenue by region and category" has no single honest one-line summary.
+ */
+export function planInsights(plan: DashboardPlan, rows: Grid, limit = 4): Insight[] {
+  const all: Insight[] = [];
+
+  for (const chart of plan.charts) {
+    if (chart.series || chart.measure2) continue;
+    const data = buildChartData(chart, plan.profiles, rows);
+    if (!data || data.length < 2) continue;
+
+    const valueName = String(data[0][1] ?? "Value");
+    const points = data.slice(1).map((row) => {
+      const value = row[1];
+      return {
+        label: String(row[0] ?? ""),
+        value: typeof value === "number" ? value : Number(value) || 0,
+      };
+    });
+    if (points.length === 0) continue;
+
+    if (chart.timeGrain) {
+      // buildChartData already returns time buckets in order, so the position in
+      // the series is the chronological key.
+      all.push(
+        ...trendInsights(
+          valueName,
+          points.map((point, at) => ({ ...point, sortKey: at }))
+        )
+      );
+    } else if (chart.dimension) {
+      // "Other" is a bucket this code made up, not a category of the business, so
+      // it must not be reported as the leader or the smallest.
+      all.push(
+        ...categoryInsights(
+          valueName,
+          chart.dimension,
+          points.filter((point) => point.label !== OTHER && point.label !== BLANK)
+        )
+      );
+    }
+  }
+
+  return pickInsights(all, limit);
+}
+
+// ---------------------------------------------------------------------------
 // Colours
 // ---------------------------------------------------------------------------
 
@@ -1070,7 +1126,8 @@ async function drawDashboard(
   // --- The dashboard sheet ------------------------------------------------------
   const heroFirst = drawable[0]?.chart.kind === "line" && drawable[0].chart.series === null;
   const layout = layoutDashboard(drawable.length, kpis.length, heroFirst);
-  sheet.getRangeByIndexes(0, 0, layout.bottom + 2, LAYOUT.columns).format.rowHeight = CELL_HEIGHT;
+  // Room for the charts plus the sentences that go under them.
+  sheet.getRangeByIndexes(0, 0, layout.bottom + 8, LAYOUT.columns).format.rowHeight = CELL_HEIGHT;
   sheet.getRangeByIndexes(0, 0, 1, LAYOUT.columns).format.columnWidth = CELL_WIDTH;
   try {
     sheet.showGridlines = false;
@@ -1172,6 +1229,35 @@ async function drawDashboard(
     styleChart(chart, spec, data, colorMaps);
   });
 
+  // --- What it shows, in words, under the charts --------------------------------
+  const insights = planInsights(
+    {
+      headers: source.headers,
+      profiles: source.profiles,
+      charts: drawable.map((item) => item.chart),
+      kpis,
+      rowCount: source.rows.length,
+    },
+    source.rows,
+    4
+  );
+  if (insights.length > 0) {
+    const heading = layout.bottom;
+    writeCell(sheet, heading, 0, "What this shows");
+    const headingCell = sheet.getRangeByIndexes(heading, 0, 1, LAYOUT.columns);
+    headingCell.format.font.bold = true;
+    headingCell.format.font.size = 13;
+
+    insights.forEach((insight, i) => {
+      const row = heading + 1 + i;
+      const line = sheet.getRangeByIndexes(row, 0, 1, LAYOUT.columns);
+      line.merge();
+      writeCell(sheet, row, 0, `- ${insight.text}`);
+      line.format.font.color = "#4b5c57";
+      line.format.horizontalAlignment = Excel.HorizontalAlignment.left;
+    });
+  }
+
   sheet.activate();
   sheet.getRangeByIndexes(0, 0, 1, 1).select();
   await context.sync();
@@ -1232,6 +1318,29 @@ export async function buildDashboard(
     }
     return drawn.result;
   });
+}
+
+/**
+ * What a sheet shows, in sentences, without building anything. Reads the source
+ * exactly as the dashboard does, so the wording matches the charts it would draw.
+ */
+export async function sheetInsights(
+  ref: DataSourceRef,
+  limit = 4
+): Promise<{ sourceName: string; lines: string[] } | null> {
+  try {
+    return await Excel.run(async (context) => {
+      const source = await readSource(context, ref);
+      if (!source) return null;
+      const plan = planDashboard(source.headers, source.profiles, source.rows);
+      return {
+        sourceName: source.name,
+        lines: planInsights(plan, source.rows, limit).map((insight) => insight.text),
+      };
+    });
+  } catch {
+    return null;
+  }
 }
 
 /** Every dashboard saved in this workbook. */

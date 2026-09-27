@@ -41,16 +41,10 @@ export function hostedManifest(xml, base, { id = HOSTED_ID } = {}) {
   out = out.split(`${DEV_BASE}/`).join(`${site}/addin/`);
 
   // The hosted copy is a separate registration from the localhost one.
-  out = out.replace(
-    /<Id>[^<]+<\/Id>/,
-    `<Id>${id}</Id>`
-  );
+  out = out.replace(/<Id>[^<]+<\/Id>/, `<Id>${id}</Id>`);
 
   // Placeholder support links become real pages.
-  out = out.replace(
-    /(<SupportUrl DefaultValue=")[^"]*(")/,
-    `$1${site}/#faq$2`
-  );
+  out = out.replace(/(<SupportUrl DefaultValue=")[^"]*(")/, `$1${site}/#faq$2`);
   out = out.replace(
     /(<bt:Url id="GetStarted.LearnMoreUrl" DefaultValue=")[^"]*(")/,
     `$1${site}/#tools$2`

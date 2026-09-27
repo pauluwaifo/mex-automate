@@ -165,6 +165,60 @@ export async function markIssues(
   });
 }
 
+/**
+ * Mark cells given by address rather than by issue, so anything that finds
+ * something worth looking at - a comparison, a live check - lands in the same
+ * register and is lifted by the same "Clear marks".
+ */
+export async function markCells(
+  sheetName: string,
+  addresses: readonly string[],
+  severity: Severity = "warning",
+  options: { replace?: boolean } = {}
+): Promise<OperationResult> {
+  const { replace = true } = options;
+  return runExcel(async (context) => {
+    const previous = replace
+      ? null
+      : await readSetting<MarkRecord | null>(context, MARKS_KEY, null);
+    if (replace) await clearMarksIn(context);
+
+    const sheet = context.workbook.worksheets.getItem(sheetName);
+    const shown = addresses.slice(0, MAX_MARKS);
+    if (shown.length === 0) {
+      await context.sync();
+      return ok("Nothing to mark.");
+    }
+
+    const ranges = shown.map((address) => {
+      const range = sheet.getRange(address);
+      range.load(["address", "format/fill/color"]);
+      return range;
+    });
+    await context.sync();
+
+    // Keeping the earlier marks means adding to their record, not starting a new
+    // one, or the first set could never be put back.
+    const record: MarkRecord =
+      previous && previous.sheet === sheetName
+        ? { sheet: sheetName, cells: { ...previous.cells } }
+        : { sheet: sheetName, cells: {} };
+
+    ranges.forEach((range) => {
+      const local = range.address.includes("!") ? range.address.split("!")[1] : range.address;
+      if (!(local in record.cells)) {
+        record.cells[local] = range.format.fill.color === "#FFFFFF" ? "" : range.format.fill.color;
+      }
+      range.format.fill.color = MARK_COLOR[severity];
+    });
+
+    writeSetting(context, MARKS_KEY, record);
+    await context.sync();
+
+    return ok(`Marked ${plural(shown.length, "cell")} on "${sheetName}".`);
+  });
+}
+
 async function clearMarksIn(context: Excel.RequestContext): Promise<number> {
   const record = await readSetting<MarkRecord | null>(context, MARKS_KEY, null);
   if (!record) return 0;

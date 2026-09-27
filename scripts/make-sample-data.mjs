@@ -380,6 +380,67 @@ const salesCheck = (() => {
   return grid;
 })();
 
+// Sheet 7: a crosstab, for /unpivot. The year sits on a merged row above the
+// months - which reads back as blanks, exactly as a real one does - and the
+// figures are read across, which is comfortable for a human and useless for a
+// chart. One gap, because real budgets have them.
+const budgetByMonth = (() => {
+  const grid = [
+    [null, null, "2024", null, null, null, null, null],
+    ["Region", "Product", "Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+  ];
+  const rows = [
+    ["North", "Widget", 12400, 13100, 12850, 14200, 15050, 15600],
+    ["North", "Gadget", 8200, 8650, 9100, 8950, 9400, 9950],
+    ["North", "Sprocket", 3100, 3250, null, 3600, 3720, 3810],
+    ["South", "Widget", 9800, 10200, 10450, 11100, 11550, 12000],
+    ["South", "Gadget", 6400, 6550, 6900, 7050, 7300, 7600],
+    ["South", "Sprocket", 2250, 2300, 2410, 2500, 2580, 2650],
+    ["East", "Widget", 7100, 7400, 7650, 8000, 8250, 8500],
+    ["East", "Gadget", 4900, 5050, 5200, 5400, 5600, 5800],
+    ["West", "Widget", 5600, 5800, 6050, 6300, 6500, 6750],
+    ["West", "Gadget", 3800, 3950, 4100, 4250, 4400, 4550],
+  ];
+  return [...grid, ...rows];
+})();
+
+// Sheets 8 and 9: the same order book a month apart, for /compare. Between the
+// two: one order's units and amount are corrected, one customer is renamed, one
+// order is cancelled, one is new, and one amount moves by half a penny - which
+// is rounding, not a change, and should not be reported.
+const [aprilBook, mayBook] = (() => {
+  const serial = (y, m, d) => Math.round((Date.UTC(y, m, d) - Date.UTC(1899, 11, 30)) / 86400000);
+  const header = ["Order ID", "Order Date", "Customer", "Region", "Units", "Amount"];
+  const april = [
+    ["SO-2001", serial(2024, 3, 2), "Acme Ltd", "North", 10, 1250],
+    ["SO-2002", serial(2024, 3, 5), "Beta Trading", "South", 4, 520],
+    ["SO-2003", serial(2024, 3, 9), "Gamma Co", "East", 7, 910.25],
+    ["SO-2004", serial(2024, 3, 14), "Delta Supplies", "West", 12, 1560],
+    ["SO-2005", serial(2024, 3, 18), "Epsilon PLC", "North", 3, 375],
+    ["SO-2006", serial(2024, 3, 23), "Zeta Holdings", "South", 9, 1170],
+    ["SO-2007", serial(2024, 3, 27), "Acme Ltd", "East", 6, 780],
+  ];
+  const may = april
+    // SO-2004 was cancelled.
+    .filter((row) => row[0] !== "SO-2004")
+    .map((row) => {
+      const copy = [...row];
+      if (copy[0] === "SO-2002") {
+        copy[4] = 6;
+        copy[5] = 780;
+      }
+      if (copy[0] === "SO-2005") copy[2] = "Epsilon Ltd";
+      // Half a penny: rounding noise, and MEx should stay quiet about it.
+      if (copy[0] === "SO-2003") copy[5] = 910.254;
+      return copy;
+    });
+  may.push(["SO-2008", serial(2024, 4, 4), "Theta Systems", "West", 5, 650]);
+  return [
+    [header, ...april],
+    [header, ...may],
+  ];
+})();
+
 const aprCsv = `Order ID,Order Date,Customer,Region,Amount,Units
 60,2024-04-03,Acme Ltd,North,1310,3
 61,2024-04-08,Epsilon PLC,South,2750,6
@@ -407,6 +468,9 @@ fs.writeFileSync(
     { name: "Sales Report", grid: salesReport },
     { name: "Sales Extract", grid: salesExtract },
     { name: "Sales Check", grid: salesCheck },
+    { name: "Budget by Month", grid: budgetByMonth },
+    { name: "April Book", grid: aprilBook },
+    { name: "May Book", grid: mayBook },
   ])
 );
 

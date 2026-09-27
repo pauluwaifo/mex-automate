@@ -50,6 +50,12 @@ The pane opens on a **chat**. Type what you want, or tap a suggestion:
 /fix                                 repair a messy export onto a new sheet
 /dashboard                           up to 8 charts and headline numbers
 /chart sum of Revenue by Region as pie
+/compare April Book with May Book    every difference between two sheets
+/unpivot                             month columns become rows
+/recipe save month end               remember these steps for next month
+/insights                            what the numbers show, in plain English
+/explain                             read the selected formula back in English
+/watch                               re-check cells as you edit them
 fix 2 and 3                          act on items from the list just shown
 skip totals                          leave one kind of fix out
 undo                                 put back the cells from the last fix
@@ -148,6 +154,64 @@ them out on a 12-column grid on a new sheet: a full-width trend first, then char
 - The numbers behind every chart go on a companion "... data" sheet.
 - Dashboards are saved in the workbook and refer to columns **by name**, so **Refresh** rebuilds
   them from next month's export even if its columns come in a different order.
+
+### Recipes — do this month's work again next month
+Every command that does real work is recorded as you go; there is no mode to turn on. `/recipe save
+month end` stores the sequence in the workbook, and `/recipe run month end` replays it.
+
+- What is stored is **the command, not the result**: `/fix` rather than "clean A1:F250". Replaying
+  re-parses each command against the workbook that is open now, which is what makes a recipe useful
+  on a sheet that has grown by four hundred rows.
+- Replay goes through the same code path as typing would, so there is no second implementation of
+  "clean up" that could drift. Steps that normally ask "shall I?" are auto-confirmed — agreeing to
+  the recipe is the agreement.
+- A step naming a sheet this workbook hasn't got is **skipped and reported**, never re-pointed at a
+  sheet with a similar name. Last month's `Feb Orders` is not this month's `Mar Orders`.
+- Recipes live in `workbook.settings`, so they travel inside the .xlsx.
+
+### Compare two sheets
+`/compare April Book with May Book` matches rows on a key column and reports every cell that differs,
+with both values and the movement, plus rows added and rows removed kept separate.
+
+- The key column is chosen by looking for a shared column that is filled in and near-unique on both
+  sides. A column of plain numbers is not taken as a key unless its name says so (`Invoice No`),
+  because a quantity column is usually distinct too.
+- Numbers are compared with a tolerance (half a penny by default), so rounding noise is not reported
+  as change. `1000` and `"1,000.00"` match; `12` and `"twelve"` do not.
+- Repeated keys are reported rather than silently compared against the wrong row.
+- With no usable key it compares whole rows and **says so** — that finds rows added and removed but
+  not cells edited, and the report states that limitation instead of quietly finding less.
+- The differences go on a new sheet; changed cells are marked in the newer sheet through Review's own
+  mark register, so **Clear marks** lifts them and restores each cell's own fill.
+
+### Unpivot a crosstab
+`/unpivot` turns `Region | Product | Jan | Feb | Mar` into one row per period — the shape charts and
+PivotTables need, without Power Query.
+
+- Headings are read as periods: `Jan`, `January 2024`, `Jan-24`, `2024-01`, `Q1 2024`, `2023`. A
+  heading naming both (`Jan Units`, `Jan Revenue`) produces one row per period with a column per
+  measure.
+- A year merged across a row above the months is handled: the two heading rows are joined, so the
+  year travels with the month.
+- When every heading knows its year, the period column is written as **real dates** with a
+  `mmm yyyy` format, so a trend chart works immediately.
+- It always writes a new sheet; the crosstab is left exactly as it was.
+- Headings that mix named measures with bare periods are refused rather than guessed at.
+
+### Insights and explaining
+- **`/insights`** — plain-English takeaways drawn from the same aggregates the charts use, so a
+  sentence can never disagree with the chart above it: the last move, the overall direction from
+  comparing halves, best and worst period, who leads, how concentrated the total is, any run of
+  consecutive rises. They also appear under every dashboard as *What this shows*. The `Other` bucket
+  is never described as a leader, because it is not a category of the business.
+- **`/explain`** — reads the selected formula back in English via a real parser (precedence,
+  right-associative `^`, sheet-qualified and absolute references, `""` inside strings), not regexes.
+  It also names what is fragile: a rate typed into the formula, a whole-column reference, `IF`
+  nested three deep, division with no guard, `VLOOKUP` finding its answer by counting columns. An
+  unreadable formula is reported as unreadable rather than described wrongly.
+- **`/watch`** — while the pane is open, re-checks just the cells you edit, a moment after you stop
+  typing, and says if something looks wrong. It never changes anything. Needs ExcelApi 1.7; where
+  that is missing it says so.
 
 ### Quick clean-ups
 - **Remove duplicate rows** — compare whole rows or only chosen key columns, optionally ignoring
@@ -253,6 +317,16 @@ src/
       dataCleaning.ts          Pure transforms + Office.js drivers
       review.ts                Mistake detectors (pure) - formulas, values, keys
       reviewSheet.ts           Marking in the sheet, fixes, snapshot undo, ignore list
+      reshape.ts               Reading periods out of headings; unpivot (pure)
+      reshapeSheet.ts          Finds the crosstab, writes the tidy sheet
+      compare.ts               Key matching and cell-by-cell diffing (pure)
+      compareSheets.ts         Reads both sheets, writes the differences report
+      recipes.ts               Recording, checking and describing recipes (pure)
+      recipeStore.ts           Recipes saved inside the workbook
+      insights.ts              Turning aggregates into sentences (pure)
+      explain.ts               Formula parser and plain-English describer (pure)
+      explainSheet.ts          Reads the selected cell for the explainer
+      watch.ts                 Re-checks the cells you edit, while you edit them
       commands.ts              The assistant's command language (pure)
       assistant.ts             Runs a command and answers with structured messages
       merge.ts                 Header planning + merge drivers
@@ -265,7 +339,7 @@ src/
       workbookReader.ts        .xlsx / .csv parsing
       types.ts                 Shared domain types
     theme.ts                   The website's jade palette and type, as a Fluent theme
-tests/                         Jest unit tests (331)
+tests/                         Jest unit tests (473)
 manifest.xml                   Add-in manifest
 ```
 
@@ -279,7 +353,7 @@ write back. Every driver returns the same `OperationResult` shape, which is what
 npm test
 ```
 
-331 unit tests cover the pure logic, including the mistake detectors and the
+473 unit tests cover the pure logic, including the mistake detectors and the
 command parser, table detection and every kind of repair on a
 deliberately nasty export, chart suggestion, time bucketing, chart data and dashboard layout, and
 regression tests for bugs caught on the sample sheet. Also covered: grid transforms, dedupe keying, date parsing and Excel serial
@@ -323,6 +397,12 @@ The sample workbook is built to exercise every tab:
 | Charts | Turn on Top N = 3 | Smaller regions collapse into one "Other" slice |
 | Formulas | Select `G1:G9` on Jan Orders, put `=E2*2` in G1, Fill formula | Preview shows the last cell before you commit |
 | Reports | On **Sales Report**, select `A3:E6`, name a zone `SalesData`, source = Jan Orders, Refresh | Rows are replaced; the title, the `Total` row and column E's formula all survive |
+| Unpivot | Open **Budget by Month**, then `/unpivot` | Reads the year merged above the months; 10 rows x 6 months become 59 tidy rows (one gap skipped) with a real date column |
+| Compare | `/compare April Book with May Book` | SO-2002 changed (units and amount), SO-2005 renamed, SO-2004 gone, SO-2008 new - and SO-2003's half-penny difference correctly ignored |
+| Insights | On **Sales Extract**, `/insights` | Four sentences drawn from the same numbers the charts use |
+| Explain | Click the `Total` cell on **Sales Check**, then `/explain` | "The total of F2:F14", and a note that the range stops short |
+| Watch | `/watch`, then type text into a number column | The edited cells are re-checked within a second and reported |
+| Recipes | Run `/fix`, then `/dashboard`, then `/recipe save month end` | Both steps are remembered; `/recipe run month end` replays them on a fresh copy |
 
 `npm stop` unregisters the add-in when you are done.
 
@@ -376,17 +456,58 @@ Not yet chosen — add a `LICENSE` file before publishing.
 
 ---
 
-## Landing page
+## Landing page and hosting
 
 The product website is a single self-contained file, [docs/index.html](docs/index.html), with an
 animated walkthrough of the add-in. It has no build step and no dependencies beyond Google Fonts.
+To preview it, open that file in a browser.
 
-**Host it on GitHub Pages:** push this repo to GitHub, then go to **Settings → Pages**, set
-**Source** to *Deploy from a branch*, and pick branch `main`, folder `/docs`. The site appears at
-`https://<your-username>.github.io/<repo-name>/` within a minute or two.
+### One deployment serves both
+
+The site and the add-in are deployed together, so every URL in the manifest sits on the same origin
+as the page that explains it:
+
+```
+https://mex-automate.vercel.app/                 the landing page
+https://mex-automate.vercel.app/addin/...        the built add-in (taskpane.html, bundles, assets)
+https://mex-automate.vercel.app/manifest.xml     the manifest people install
+https://mex-automate.vercel.app/install.ps1      the Windows installer
+```
+
+```bash
+npm run build:site     # webpack --mode production, then assemble public/
+```
+
+- [scripts/make-manifest.mjs](scripts/make-manifest.mjs) derives the hosted manifest from
+  [manifest.xml](manifest.xml): it rewrites the `localhost:3100` URLs to `/addin/`, swaps in a
+  **separate add-in id** so the localhost copy and the installed copy can both be registered at
+  once, and replaces the placeholder support links. It refuses to emit a manifest that still
+  contains a placeholder URL.
+- [scripts/build-site.mjs](scripts/build-site.mjs) assembles `public/`, taking the production
+  domain from Vercel's own `VERCEL_PROJECT_PRODUCTION_URL` so renaming the project cannot leave the
+  manifest pointing at a stale host. Override with `MEX_SITE_BASE`.
+- Pushing to `main` deploys: the GitHub repo is connected to the Vercel project. `vercel.json` sets
+  the build command, serves `manifest.xml` as a download, and keeps `/addin/**` uncached so an
+  update reaches people without a reinstall.
+
+`.npmrc` sets `legacy-peer-deps=true`. `babel-jest` 29 asks for Babel 7 while this project builds
+with Babel 8; without it a clean `npm install` fails, including on Vercel's build container.
+
+### Installing the hosted add-in
+
+Excel loads an add-in from a manifest, and outside AppSource that manifest has to be pointed at by
+hand. [install/install.ps1](install/install.ps1) does it for Windows: it downloads the manifest to
+`%LOCALAPPDATA%\MEx Automate` and writes one value under
+`HKCU\Software\Microsoft\Office\16.0\WEF\Developer`. No admin rights, nothing machine-wide, and
+[install/uninstall.ps1](install/uninstall.ps1) removes exactly those two things.
+
+The installer refuses to register a manifest whose `<Id>` is not the expected one, so a wrong or
+redirected URL cannot quietly install something else.
+
+Excel on the web takes the manifest through **Home → Add-ins → More Settings → Upload My Add-in**;
+Excel for Mac reads it from the `wef` folder. Both routes, and the Trusted Add-in Catalogs route for
+people who would rather not run a script, are on the site's install section.
 
 **Before launch:** the "Get it free" buttons scroll to the install steps until the AppSource
 listing exists. When it does, set `STORE_URL` near the top of the page's `<script>` to the listing
 URL; every button uses it.
-
-To preview locally, open `docs/index.html` in a browser.

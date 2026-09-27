@@ -14,7 +14,7 @@ import globals from "globals";
  */
 export default [
   {
-    ignores: ["dist/**", "node_modules/**", "coverage/**"],
+    ignores: ["dist/**", "public/**", "node_modules/**", "coverage/**"],
   },
 
   ...officeAddins.configs.react,

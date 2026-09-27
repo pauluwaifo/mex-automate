@@ -54,6 +54,24 @@ export const COMMANDS: CommandInfo[] = [
     group: "Main",
   },
   {
+    command: "/compare",
+    example: "/compare April with May",
+    description: "Find every difference between two sheets",
+    group: "Main",
+  },
+  {
+    command: "/recipe",
+    example: "/recipe save month end",
+    description: "Remember these steps, and run them again next month",
+    group: "Main",
+  },
+  {
+    command: "/unpivot",
+    example: "/unpivot",
+    description: "Turn month columns into rows a chart can use",
+    group: "Clean up",
+  },
+  {
     command: "/duplicates",
     example: "/duplicates",
     description: "Remove duplicate rows",
@@ -90,6 +108,12 @@ export const COMMANDS: CommandInfo[] = [
     group: "Charts",
   },
   {
+    command: "/insights",
+    example: "/insights",
+    description: "What the numbers show, in plain English",
+    group: "Charts",
+  },
+  {
     command: "/combine",
     example: "/combine Jan Orders, Feb Orders",
     description: "Stack sheets into one table",
@@ -111,6 +135,18 @@ export const COMMANDS: CommandInfo[] = [
     command: "/marks",
     example: "/marks clear",
     description: "Clear the marks Review left in the sheet",
+    group: "More",
+  },
+  {
+    command: "/explain",
+    example: "/explain",
+    description: "Read the selected formula back in plain English",
+    group: "More",
+  },
+  {
+    command: "/watch",
+    example: "/watch",
+    description: "Re-check cells as you edit them",
     group: "More",
   },
   {
@@ -136,11 +172,20 @@ export function completeCommand(typed: string): CommandInfo[] {
 
 export type ToolName = "review" | "formulas" | "reports" | "merge" | "charts" | "clean" | "home";
 
+/** What "/recipe ..." was asking for. */
+export type RecipeAction = "list" | "save" | "run" | "delete" | "record" | "stop";
+
 export type Intent =
   | { kind: "help" }
   | { kind: "hello" }
   | { kind: "fix"; sheet: string | null }
   | { kind: "review"; sheet: string | null }
+  | { kind: "unpivot"; sheet: string | null }
+  | { kind: "compare"; first: string | null; second: string | null }
+  | { kind: "insights"; sheet: string | null }
+  | { kind: "explain" }
+  | { kind: "recipe"; action: RecipeAction; name: string | null }
+  | { kind: "watch"; on: boolean | null }
   | { kind: "undo" }
   | { kind: "clearMarks" }
   | { kind: "unignore" }
@@ -381,6 +426,32 @@ export function parseCommand(input: string, context: ParseContext): Intent {
       case "check":
       case "audit":
         return { kind: "review", sheet: sheetIn(body) };
+      case "unpivot":
+      case "flatten":
+      case "reshape":
+      case "unstack":
+        return { kind: "unpivot", sheet: sheetIn(body) };
+      case "compare":
+      case "diff":
+      case "reconcile":
+        return parseCompare(body, context.sheets);
+      case "insights":
+      case "insight":
+      case "explainit":
+      case "sowhat":
+        return { kind: "insights", sheet: sheetIn(body) };
+      case "explain":
+        return { kind: "explain" };
+      case "recipe":
+      case "recipes":
+      case "again":
+        return parseRecipeCommand(body);
+      case "watch":
+      case "unwatch":
+        return {
+          kind: "watch",
+          on: head.toLowerCase() === "unwatch" ? false : parseOnOff(body),
+        };
       case "undo":
         return { kind: "undo" };
       case "marks":
@@ -497,6 +568,48 @@ export function parseCommand(input: string, context: ParseContext): Intent {
   if (/^(ignore|hide|dismiss)\b/.test(text)) return { kind: "ignore", numbers: parseNumbers(text) };
   if (/^(show|go ?to|take me to)\s+(me\s+)?\d/.test(text))
     return { kind: "show", numbers: parseNumbers(text) };
+  // Recipes, before anything else: "do that again" and "save these steps" are
+  // about the commands just run, not about the sheet.
+  if (
+    /\b(recipe|routine|playbook)\b/.test(text) ||
+    /\b(do (that|this) again|same as last (month|time))\b/.test(text)
+  ) {
+    return parseRecipeCommand(raw);
+  }
+  if (/\b(watch(ing)?|keep an eye|as i type)\b/.test(text) && !/\bdash ?board\b/.test(text)) {
+    return { kind: "watch", on: /\b(stop|off|don'?t|no longer)\b/.test(text) ? false : true };
+  }
+  // "explain this formula" mentions a formula, so it has to be read before the
+  // line that opens the formula tools.
+  if (
+    /\bexplain\b.*\b(formula|cell|this)\b|\bwhat does (this|that) (formula|cell)\b|\bin (plain )?english\b/.test(
+      text
+    )
+  ) {
+    return { kind: "explain" };
+  }
+  // "compare" has to come before "check", since "check what changed between the
+  // two sheets" is a comparison, not a review.
+  if (
+    /\b(compare|reconcile|differences?|what changed|diff)\b/.test(text) ||
+    /\b(vs\.?|versus)\b/.test(text)
+  ) {
+    return parseCompare(raw, context.sheets);
+  }
+  if (
+    /\b(unpivot|flatten|unstack|reshape)\b/.test(text) ||
+    // "the months are in columns", "months across the top", "columns into rows".
+    /\b(months?|quarters?|years?|periods?)\b.*\b(columns?|across the top)\b/.test(text) ||
+    /\bcolumns? (in)?to rows?\b|\bwide (to|into) (long|tall)\b/.test(text)
+  ) {
+    return { kind: "unpivot", sheet };
+  }
+  if (
+    /\b(insights?|takeaways?|so what|highlights?)\b/.test(text) ||
+    /\bwhat (does|do)\b.*\b(show|say|mean|tell me|look like)\b/.test(text)
+  ) {
+    return { kind: "insights", sheet };
+  }
   if (
     /\b(review|check|audit|proof ?read)\b/.test(text) ||
     /what'?s wrong|any (mistakes|errors|problems)|is (this|it) (right|correct)/.test(text)
@@ -554,6 +667,75 @@ function parseCase(text: string): Intent {
   if (/\bsentence/.test(lower)) return { kind: "case", mode: "sentence" };
   if (/\b(title|proper)/.test(lower)) return { kind: "case", mode: "proper" };
   return { kind: "case", mode: null };
+}
+
+function parseOnOff(text: string): boolean | null {
+  const lower = text.toLowerCase();
+  if (/\b(off|stop|no|don'?t)\b/.test(lower)) return false;
+  if (/\b(on|start|yes|please)\b/.test(lower)) return true;
+  return null;
+}
+
+/**
+ * "compare April with May", "April vs May", "what changed between April and May".
+ * The two sheets are taken in the order they are written, so the first is the
+ * older one and "added" means added since.
+ */
+function parseCompare(body: string, sheets: readonly string[]): Intent {
+  const named = findSheets(body, sheets);
+  return {
+    kind: "compare",
+    first: named[0] ?? null,
+    second: named[1] ?? null,
+  };
+}
+
+/**
+ * "/recipe save month end", "run month end", "list". A bare "/recipe" lists what
+ * is saved, which is the safe reading: running something unnamed would be a
+ * guess at which routine was meant.
+ */
+function parseRecipeCommand(body: string): Intent {
+  const text = body
+    .toLowerCase()
+    .replace(/^\/?(recipe|recipes|again)\b/, "")
+    .trim();
+
+  const strip = (words: RegExp) =>
+    text
+      .replace(words, "")
+      .replace(/\b(recipe|routine|it|this|that|as|the|a)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  if (/^(list|show|what|which|ls)?$/.test(text))
+    return { kind: "recipe", action: "list", name: null };
+  if (/\b(start|begin) recording\b|^record\b/.test(text)) {
+    return {
+      kind: "recipe",
+      action: "record",
+      name: strip(/\b(start|begin|record(ing)?)\b/g) || null,
+    };
+  }
+  if (/\b(stop|finish|end) recording\b|^stop\b/.test(text)) {
+    return { kind: "recipe", action: "stop", name: null };
+  }
+  if (/^(save|remember|keep)\b/.test(text)) {
+    return { kind: "recipe", action: "save", name: strip(/^(save|remember|keep)\b/) || null };
+  }
+  if (/^(run|replay|do|apply|use)\b|\bagain\b|\bsame as last\b/.test(text)) {
+    return {
+      kind: "recipe",
+      action: "run",
+      name: strip(/^(run|replay|do|apply|use)\b|\bagain\b|\bsame as last (month|time)\b/g) || null,
+    };
+  }
+  if (/^(delete|remove|forget)\b/.test(text)) {
+    return { kind: "recipe", action: "delete", name: strip(/^(delete|remove|forget)\b/) || null };
+  }
+  if (/^(list|show|what|which)\b/.test(text)) return { kind: "recipe", action: "list", name: null };
+  // A bare name after /recipe means run it: "/recipe month end".
+  return { kind: "recipe", action: "run", name: text || null };
 }
 
 function parseCombine(body: string, sheets: readonly string[]): Intent {

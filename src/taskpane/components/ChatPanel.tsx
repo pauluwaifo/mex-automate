@@ -24,6 +24,8 @@ import {
 } from "../features/assistant";
 import { CommandInfo, completeCommand, ToolName } from "../features/commands";
 import type { DashChartKind } from "../features/dashboard";
+import { groupIssues, summarize } from "../features/review";
+import { watchSheet, Watcher, WatchUpdate } from "../features/watch";
 import { DISPLAY_FONT } from "../theme";
 
 interface ChatMessage {
@@ -265,6 +267,15 @@ const useStyles = makeStyles({
     borderRadius: tokens.borderRadiusSmall,
     backgroundColor: tokens.colorNeutralBackground3,
   },
+  /** A formula shown back to the reader: monospaced, and allowed to wrap. */
+  formula: {
+    fontFamily: tokens.fontFamilyMonospace,
+    fontSize: tokens.fontSizeBase200,
+    padding: "5px 7px",
+    borderRadius: tokens.borderRadiusSmall,
+    backgroundColor: tokens.colorNeutralBackground3,
+    overflowWrap: "anywhere",
+  },
   typing: {
     display: "flex",
     columnGap: "4px",
@@ -396,6 +407,79 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenTool }) => {
     if (log) log.scrollTo?.({ top: log.scrollHeight, behavior: "smooth" });
   }, [messages, busy]);
 
+  // ---------------------------------------------------------------------------
+  // Watching the sheet
+  //
+  // The subscription has to outlive the message that started it, so it lives in
+  // a ref here rather than in the assistant's state. Findings are posted as
+  // ordinary bot messages, and nothing in the sheet is changed.
+  // ---------------------------------------------------------------------------
+  const watcher = React.useRef<Watcher | null>(null);
+
+  const postWatchUpdate = React.useCallback((update: WatchUpdate) => {
+    if (update.tooBig) return;
+    if (update.issues.length === 0) return;
+    const groups = groupIssues(update.issues);
+    setMessages((current) => [
+      ...current,
+      {
+        id: nextId.current++,
+        from: "bot",
+        reply: {
+          content: [
+            {
+              type: "issues",
+              sheet: update.sheet,
+              groups,
+              summary: `${summarize(update.issues)} in ${update.address}, just edited`,
+              marked: 0,
+              structuralRows: 0,
+              truncated: false,
+            },
+          ],
+          chips: [
+            { label: "Check the whole sheet", send: `/review ${update.sheet}` },
+            { label: "Stop watching", send: "/watch off" },
+          ],
+        },
+      },
+    ]);
+  }, []);
+
+  const applyWatch = React.useCallback(
+    async (request: { action: "start" | "stop"; sheet?: string }) => {
+      if (watcher.current) {
+        await watcher.current.stop();
+        watcher.current = null;
+      }
+      if (request.action === "stop") return;
+
+      const started = await watchSheet(request.sheet, postWatchUpdate);
+      if ("error" in started) {
+        setMessages((current) => [
+          ...current,
+          {
+            id: nextId.current++,
+            from: "bot",
+            reply: { content: [{ type: "text", text: started.error }], chips: STARTER_CHIPS },
+          },
+        ]);
+        return;
+      }
+      watcher.current = started;
+    },
+    [postWatchUpdate]
+  );
+
+  // Leaving the pane open with a dead handler would leak; stop on unmount.
+  React.useEffect(
+    () => () => {
+      void watcher.current?.stop();
+      watcher.current = null;
+    },
+    []
+  );
+
   const send = React.useCallback(
     async (text: string) => {
       const trimmed = text.trim();
@@ -409,9 +493,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenTool }) => {
       setMessages((current) => [...current, { id: nextId.current++, from: "bot", reply }]);
       setBusy(false);
       if (reply.openTool) onOpenTool(reply.openTool);
+      if (reply.watch) await applyWatch(reply.watch);
       inputRef.current?.focus();
     },
-    [busy, state, onOpenTool]
+    [busy, state, onOpenTool, applyWatch]
   );
 
   const choose = (info: CommandInfo) => {
@@ -740,6 +825,116 @@ const Content: React.FC<{ content: BotContent; onCommand: (text: string) => void
               </span>
             ))}
           </div>
+        </>
+      );
+
+    case "crosstab":
+      return (
+        <>
+          <Text weight="semibold">
+            &quot;{content.sheet}&quot; is a crosstab: {content.shape}.
+          </Text>
+          <Text className={styles.hint}>These stay as they are, one per row:</Text>
+          <div className={styles.columnChips}>
+            {content.keys.map((key) => (
+              <span key={key} className={styles.columnChip}>
+                {key}
+              </span>
+            ))}
+          </div>
+          <Text className={styles.hint}>These become rows instead of columns:</Text>
+          <div className={styles.columnChips}>
+            {content.periods.slice(0, 14).map((period) => (
+              <span key={period} className={styles.columnChip}>
+                {period}
+              </span>
+            ))}
+            {content.periods.length > 14 ? (
+              <span className={styles.columnChip}>+{content.periods.length - 14} more</span>
+            ) : null}
+          </div>
+          <Text className={styles.hint}>
+            I&apos;ll write the tidy version to a new sheet. &quot;{content.sheet}&quot; is left exactly as it is.
+          </Text>
+        </>
+      );
+
+    case "insights":
+      return (
+        <>
+          <Text weight="semibold">What &quot;{content.sheet}&quot; shows</Text>
+          <ul className={styles.details}>
+            {content.lines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          <Text className={styles.hint}>
+            These are straight arithmetic on your own numbers - no guessing about why.
+          </Text>
+        </>
+      );
+
+    case "explain":
+      return (
+        <>
+          <Text className={styles.hint}>{content.address}</Text>
+          {content.formula ? <code className={styles.formula}>{content.formula}</code> : null}
+          <Text>{content.english}</Text>
+          {content.references.length > 0 ? (
+            <>
+              <Text className={styles.hint}>It reads:</Text>
+              <div className={styles.columnChips}>
+                {content.references.map((reference) => (
+                  <span key={reference} className={styles.columnChip}>
+                    {reference}
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : null}
+          {content.warnings.length > 0 ? (
+            <ul className={styles.details}>
+              {content.warnings.map((warning) => (
+                <li key={warning.kind}>{warning.text}</li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      );
+
+    case "recipes":
+      return (
+        <>
+          <Text weight="semibold">Saved in this workbook</Text>
+          {content.recipes.length === 0 ? (
+            <Text className={styles.hint}>Nothing saved yet.</Text>
+          ) : (
+            <ul className={styles.list}>
+              {content.recipes.map((recipe) => (
+                <li key={recipe.name} className={styles.item}>
+                  <span className={styles.itemText}>
+                    <span className={styles.itemTitle}>{recipe.name}</span>
+                    <span className={styles.hint}>
+                      {recipe.steps} step{recipe.steps === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                  <Button size="small" appearance="outline" onClick={() => onCommand(`/recipe run ${recipe.name}`)}>
+                    Run
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {content.recorded > 0 ? (
+            <Text className={styles.hint}>
+              I&apos;ve recorded {content.recorded} step{content.recorded === 1 ? "" : "s"} this session. Say
+              &quot;/recipe save month end&quot; to keep them.
+            </Text>
+          ) : (
+            <Text className={styles.hint}>
+              Run a few commands and I&apos;ll remember the sequence, ready to save as a recipe.
+            </Text>
+          )}
         </>
       );
 

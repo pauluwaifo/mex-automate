@@ -267,3 +267,112 @@ describe("shaping a dashboard", () => {
     expect(parse("/chart sum of Revenue by Region")).toMatchObject({ add: false });
   });
 });
+
+describe("reshaping", () => {
+  it("understands the slash command and its aliases", () => {
+    expect(parse("/unpivot")).toEqual({ kind: "unpivot", sheet: null });
+    expect(parse("/flatten Sales Extract")).toEqual({ kind: "unpivot", sheet: "Sales Extract" });
+    expect(parse("/reshape").kind).toBe("unpivot");
+  });
+
+  it("understands how people describe the problem", () => {
+    expect(parse("the months are in columns").kind).toBe("unpivot");
+    expect(parse("turn these columns into rows").kind).toBe("unpivot");
+    expect(parse("unpivot this").kind).toBe("unpivot");
+  });
+});
+
+describe("comparing two sheets", () => {
+  it("takes the sheets in the order they are written", () => {
+    expect(parse("/compare Jan Orders with Feb Orders")).toEqual({
+      kind: "compare",
+      first: "Jan Orders",
+      second: "Feb Orders",
+    });
+    expect(parse("Feb Orders vs Jan Orders")).toMatchObject({
+      first: "Feb Orders",
+      second: "Jan Orders",
+    });
+  });
+
+  it("understands the everyday phrasings", () => {
+    expect(parse("what changed between Jan Orders and Feb Orders").kind).toBe("compare");
+    expect(parse("reconcile these two").kind).toBe("compare");
+    expect(parse("/diff").kind).toBe("compare");
+  });
+
+  it("is a comparison, not a review, when someone says check what changed", () => {
+    expect(parse("check what changed").kind).toBe("compare");
+  });
+
+  it("leaves the sheets unset when none were named", () => {
+    expect(parse("/compare")).toEqual({ kind: "compare", first: null, second: null });
+  });
+});
+
+describe("insights and explaining", () => {
+  it("asks for insights", () => {
+    expect(parse("/insights")).toEqual({ kind: "insights", sheet: null });
+    expect(parse("what do these numbers show").kind).toBe("insights");
+    expect(parse("what are the takeaways").kind).toBe("insights");
+  });
+
+  it("asks for a formula in English", () => {
+    expect(parse("/explain")).toEqual({ kind: "explain" });
+    expect(parse("explain this formula").kind).toBe("explain");
+    expect(parse("what does this cell do").kind).toBe("explain");
+  });
+
+  it("does not confuse explaining a formula with opening the formula tools", () => {
+    expect(parse("explain this formula").kind).toBe("explain");
+    expect(parse("formulas").kind).toBe("open");
+  });
+});
+
+describe("recipes", () => {
+  it("lists when nothing else was asked for", () => {
+    expect(parse("/recipe")).toEqual({ kind: "recipe", action: "list", name: null });
+    expect(parse("/recipes list")).toMatchObject({ action: "list" });
+  });
+
+  it("saves under a name", () => {
+    expect(parse("/recipe save month end")).toEqual({
+      kind: "recipe",
+      action: "save",
+      name: "month end",
+    });
+    expect(parse("save this as a recipe called month end")).toMatchObject({ action: "save" });
+  });
+
+  it("runs by name, however it is asked", () => {
+    expect(parse("/recipe run month end")).toMatchObject({ action: "run", name: "month end" });
+    expect(parse("/recipe month end")).toMatchObject({ action: "run", name: "month end" });
+    expect(parse("do that again").kind).toBe("recipe");
+  });
+
+  it("deletes by name", () => {
+    expect(parse("/recipe delete month end")).toMatchObject({
+      action: "delete",
+      name: "month end",
+    });
+  });
+
+  it("starts and stops recording", () => {
+    expect(parse("/recipe record")).toMatchObject({ action: "record" });
+    expect(parse("/recipe stop recording")).toMatchObject({ action: "stop" });
+  });
+});
+
+describe("watching a sheet", () => {
+  it("turns watching on and off", () => {
+    expect(parse("/watch")).toEqual({ kind: "watch", on: null });
+    expect(parse("/watch off")).toEqual({ kind: "watch", on: false });
+    expect(parse("/unwatch")).toEqual({ kind: "watch", on: false });
+    expect(parse("watch this sheet as i type")).toMatchObject({ kind: "watch", on: true });
+    expect(parse("stop watching")).toMatchObject({ kind: "watch", on: false });
+  });
+
+  it("does not hijack a dashboard request that mentions live data", () => {
+    expect(parse("build a live dashboard").kind).toBe("dashboard");
+  });
+});

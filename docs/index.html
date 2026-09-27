@@ -961,8 +961,42 @@ footer p { margin: 0; max-width: 60ch; }
         </div>
       </article>
 
+      <article class="feature">
+        <div>
+          <div class="feature-name"><span class="spec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M20 11.5A8.5 8.5 0 1 1 11.5 3a8.5 8.5 0 0 1 7.6 4.7"/><path d="M20 3.5v4h-4"/><path d="M11.5 7v5l3.5 2"/></svg></span><h3>Do this month's work again next month</h3></div>
+          <p>The expensive part of a monthly report isn't the thinking, it's the repetition: the same clean-up, the same combine, the same dashboard, in the same order, from a file with the same shape and different numbers.</p>
+          <p>So MEx remembers. Every command that works is recorded as you go — there's no mode to switch on — and <code>/recipe save month end</code> keeps the sequence. Next month, one line runs the lot.</p>
+          <p><strong>What's stored is the command, not the result.</strong> "Clean up this sheet", not "clean A1:F250" — so a recipe still works when the sheet is four hundred rows longer. If a step needs a sheet this workbook hasn't got, it's skipped and named rather than pointed at whatever sheet looks similar.</p>
+          <p class="mini-note">Recipes live inside the .xlsx, like the dashboards do. Send the file to a colleague and their copy of MEx can run the same routine. No account, no server, nothing to sync.</p>
+        </div>
+        <div class="cells" aria-label="A recipe running">
+          <div class="cellset before"><span>/recipe run month end</span><span>1. Clean up the sheet</span><span>2. Combine 3 sheets</span><span>3. Build a dashboard</span></div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="cellset after"><span>All 3 steps done</span><span class="r">2,481 rows</span><span class="r">8 charts</span><span>18 seconds</span></div>
+        </div>
+      </article>
+
+      <article class="feature">
+        <div>
+          <div class="feature-name"><span class="spec-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><rect x="2.5" y="4" width="8" height="16" rx="1.5"/><rect x="13.5" y="4" width="8" height="16" rx="1.5"/><path d="M6.5 10h0M17.5 10h0M6.5 14h0M17.5 14h0"/></svg></span><h3>Find every difference between two sheets</h3></div>
+          <p>"Last month's file and this month's disagree by 412 and I can't find where." MEx matches the rows on a key column and reports every cell that moved, with both values and the amount of the change — plus the rows that appeared and the rows that went away, kept separate, because a missing row and an edited row need different explanations.</p>
+          <p>Numbers are compared with a tolerance, so a figure rounded to the penny in one export and not the other isn't reported as a difference. Rounding noise is silence; real movement is a line in the report.</p>
+          <p>The differences go on their own sheet, ready to send to whoever asked, and the changed cells are highlighted in the newer sheet so you can go and look.</p>
+          <p class="mini-note">If no column is unique enough to match rows on, MEx says so and compares whole rows instead — which finds what was added and removed, but not what was edited. It tells you that rather than quietly reporting less.</p>
+        </div>
+        <div class="cells" aria-label="A comparison">
+          <div class="cellset before"><span>April</span><span class="r">SO-1002 · 500</span><span class="r">SO-1004 · 200</span><span>—</span></div>
+          <span class="arrow" aria-hidden="true">→</span>
+          <div class="cellset after"><span>May</span><span class="r">620 <em>(+120)</em></span><span>gone</span><span>SO-1005 new</span></div>
+        </div>
+      </article>
+
       <h3 class="also-head">Also in the box</h3>
       <div class="also">
+        <div><h4>Months across the top?</h4><p>Turn a crosstab into rows a chart can actually use — Power Query's unpivot, in one command.</p></div>
+        <div><h4>What this shows</h4><p>Plain-English takeaways under every dashboard: the last move, who leads, how concentrated the total is.</p></div>
+        <div><h4>Explain a formula</h4><p>Read any formula back in English, with the fragile parts named: hardcoded rates, whole-column ranges, unguarded division.</p></div>
+        <div><h4>Watch as you type</h4><p>Re-checks the cells you edit and speaks up while it's still fresh, without changing anything.</p></div>
         <div><h4>Quick clean-ups</h4><p>One fix at a time: duplicates, spaces, dates, capital letters.</p></div>
         <div><h4>Combine sheets</h4><p>Stack sheets or CSV and Excel files into one table, columns lined up by name.</p></div>
         <div><h4>Make a chart</h4><p>A single chart or summary table, in plain words: the Sum of Amount for each Region.</p></div>

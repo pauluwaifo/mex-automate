@@ -12,6 +12,7 @@ import {
   OTHER_COLOR,
   PALETTE,
   planDashboard,
+  planInsights,
   rankDimensions,
   rankMeasures,
   suggestCharts,
@@ -448,5 +449,39 @@ describe("planDashboard options", () => {
     expect(planDashboard(HEADERS, PROFILES, ROWS, { useColumns: [] }).charts.length).toBe(
       planDashboard(HEADERS, PROFILES, ROWS).charts.length
     );
+  });
+});
+
+describe("planInsights", () => {
+  const plan = planDashboard(HEADERS, PROFILES, ROWS);
+
+  it("says something about both the trend and the split", () => {
+    const insights = planInsights(plan, ROWS, 4);
+    expect(insights.length).toBeGreaterThan(1);
+    const kinds = insights.map((insight) => insight.kind);
+    expect(new Set(kinds).size).toBe(kinds.length);
+  });
+
+  it("only reports numbers that are actually in the charts", () => {
+    const insights = planInsights(plan, ROWS, 6);
+    const total = insights.find((insight) => insight.kind === "total");
+    // The total quoted has to be the revenue the charts are drawn from.
+    if (total) {
+      expect(total.text).toContain(
+        TOTAL_REVENUE >= 100_000 ? `${Math.round(TOTAL_REVENUE / 1000)}` : `${TOTAL_REVENUE}`
+      );
+    }
+  });
+
+  it("never calls the Other bucket a leader", () => {
+    const wide = planDashboard(HEADERS, PROFILES, ROWS);
+    const insights = planInsights(wide, ROWS, 8);
+    for (const insight of insights) {
+      expect(insight.text).not.toContain(`${OTHER} is the largest`);
+    }
+  });
+
+  it("says nothing when there is nothing to read", () => {
+    expect(planInsights({ ...plan, charts: [] }, ROWS)).toEqual([]);
   });
 });
