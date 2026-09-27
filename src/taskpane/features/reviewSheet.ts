@@ -299,6 +299,43 @@ export function lastFixDescription(): string | null {
 }
 
 /**
+ * Snapshots cells by address before something else changes them, so "undo"
+ * covers that change too.
+ *
+ * Anything in the add-in that writes to cells the user did not type into should
+ * call this first. It reads the current contents into the same undo stack the
+ * Review fixes use, which is why there is one "undo" rather than one per
+ * feature. The caller writes afterwards, in the same Excel.run batch.
+ */
+export async function rememberCells(
+  context: Excel.RequestContext,
+  sheetName: string,
+  addresses: readonly string[],
+  description: string
+): Promise<void> {
+  if (addresses.length === 0) return;
+  const sheet = context.workbook.worksheets.getItem(sheetName);
+  const ranges = addresses.map((address) => {
+    const range = sheet.getRange(address);
+    range.load(["values", "formulas", "numberFormat", "rowIndex", "columnIndex"]);
+    return range;
+  });
+  await context.sync();
+
+  const entry: UndoEntry = { sheet: sheetName, description, cells: [] };
+  for (const range of ranges) {
+    entry.cells.push({
+      row: range.rowIndex,
+      column: range.columnIndex,
+      value: (range.values as CellValue[][])[0][0],
+      formula: String((range.formulas as unknown[][])[0][0] ?? ""),
+      numberFormat: String((range.numberFormat as unknown[][])[0][0] ?? "General"),
+    });
+  }
+  undoStack.push(entry);
+}
+
+/**
  * Apply the fixes attached to these issues. Cells are snapshotted first, so
  * `undoLastFix` can put them back exactly as they were.
  */

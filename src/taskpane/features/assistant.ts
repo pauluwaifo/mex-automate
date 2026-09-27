@@ -48,8 +48,13 @@ import {
 } from "./reviewSheet";
 import { countProblems, FindingId, previewTidy, TidyFinding, tidyToNewSheet } from "./tidy";
 import { describeCrosstab } from "./reshape";
+import { HealthFinding, HealthReport, summarizeHealth } from "./health";
+import { Guard, summarizeGuards } from "./guards";
+import { applyGuards, clearGuards, GuardProposal, proposeGuards } from "./guardsSheet";
+import { applyHealthFix, checkWorkbookHealth } from "./healthSheet";
 import { crosstabColumns, CrosstabLook, findCrosstab, unpivotToNewSheet } from "./reshapeSheet";
-import { compareSheets, guessSheetsToCompare } from "./compareSheets";
+import { compareSheets, compareSheetWithTable, guessSheetsToCompare } from "./compareSheets";
+import { readWorkbookFile } from "../shared/workbookReader";
 import { explainFormula } from "./explain";
 import { readSelectedFormula } from "./explainSheet";
 import {
@@ -114,6 +119,21 @@ export type BotContent =
       /** One line describing the shape that was found. */
       shape: string;
     }
+  | {
+      type: "health";
+      summary: string;
+      findings: HealthFinding[];
+      sheetsScanned: number;
+      sheetsSkipped: string[];
+    }
+  | {
+      type: "guards";
+      sheet: string;
+      rows: number;
+      guards: Guard[];
+      /** How many cells already there would have tripped each rule. */
+      existingProblems: Record<string, number>;
+    }
   | { type: "insights"; sheet: string; lines: string[] }
   | {
       type: "explain";
@@ -146,6 +166,12 @@ export interface BotReply {
    * not here, because it outlives any one message.
    */
   watch?: { action: "start" | "stop"; sheet?: string };
+  /**
+   * Ask the pane to open a file picker. An add-in cannot reach the file system
+   * on its own, so comparing against last month's export means the person who
+   * has that file hands it over.
+   */
+  pickFile?: { purpose: "compare"; sheet: string };
 }
 
 type Pending =
@@ -161,7 +187,9 @@ type Pending =
       problemsFixed: number;
     }
   | { kind: "review"; sheet: string; groups: IssueGroup[] }
-  | { kind: "unpivot"; sheet: string; look: CrosstabLook };
+  | { kind: "unpivot"; sheet: string; look: CrosstabLook }
+  | { kind: "health"; report: HealthReport }
+  | { kind: "protect"; proposal: GuardProposal };
 
 export interface AssistantState {
   pending: Pending;
@@ -626,6 +654,52 @@ export async function respond(
 /** A shell recipe, only ever used to reuse addStep's rules for the session log. */
 const EMPTY_RECIPE: Recipe = { name: "", createdAt: "", updatedAt: "", steps: [] };
 
+/**
+ * Compares a sheet against a file the user just picked.
+ *
+ * The pane calls this once it has the file, because only the pane can open a
+ * file picker. Which sheet of a multi-sheet workbook to use is decided here
+ * rather than asked: the largest table is what someone means by "the file",
+ * and the reply says which one was taken so a wrong guess is visible.
+ */
+export async function compareAgainstFile(sheetName: string, file: File): Promise<BotReply> {
+  let workbookData;
+  try {
+    workbookData = await readWorkbookFile(file);
+  } catch (error) {
+    return resultReply({
+      ok: false,
+      message: `I couldn't read "${file.name}": ${error instanceof Error ? error.message : "unknown problem"}.`,
+    });
+  }
+
+  const usable = workbookData.sheets
+    .filter((candidate) => candidate.grid.length >= 2)
+    .sort((a, b) => b.grid.length - a.grid.length);
+  if (usable.length === 0) {
+    return resultReply({
+      ok: false,
+      message: `"${file.name}" has no sheet with a heading row and data under it.`,
+    });
+  }
+
+  const chosen = usable[0];
+  const label = workbookData.sheets.length > 1 ? `${file.name} · ${chosen.name}` : file.name;
+
+  const outcome = await compareSheetWithTable(sheetName, { label, grid: chosen.grid });
+  const details = [...(outcome.details ?? [])];
+  if (usable.length > 1) {
+    details.push(
+      `"${file.name}" has ${usable.length} sheets with data; I used "${chosen.name}", the largest.`
+    );
+  }
+
+  return resultReply({ ...outcome, details }, [
+    chip("Clear the marks", "/marks clear"),
+    chip("Compare another file", "/compare with a file"),
+  ]);
+}
+
 // ---------------------------------------------------------------------------
 // Recipes
 // ---------------------------------------------------------------------------
@@ -841,6 +915,12 @@ async function route(
           ])
         );
       }
+      if (pending?.kind === "protect") {
+        const result = await applyGuards(pending.proposal, pending.proposal.guards);
+        return clear(
+          resultReply(result, result.ok ? [chip("Take them off again", "/protect off")] : [])
+        );
+      }
       if (pending?.kind === "unpivot") {
         const result = await unpivotToNewSheet(pending.sheet);
         return clear(
@@ -864,6 +944,120 @@ async function route(
         return clear(resultReply(result, result.ok ? [chip("Refresh it later", "/refresh")] : []));
       }
       return keep(say("There's nothing waiting for a yes right now.", STARTER_CHIPS));
+    }
+
+    case "health": {
+      // The two repairs act on whatever the last check found, so they need a
+      // check to have happened. Running one silently would scan the workbook
+      // twice and repair something the user never saw.
+      if (intent.action !== "check") {
+        if (pending?.kind !== "health") {
+          return keep(
+            say("Run /health first, then I'll know which formulas and rows you mean.", [
+              chip("Check this workbook", "/health"),
+            ])
+          );
+        }
+        const wanted = intent.action === "narrow" ? "tightenRanges" : "clearBeyondData";
+        const fixes = pending.report.findings
+          .map((finding) => finding.fix)
+          .filter((fix): fix is NonNullable<typeof fix> => fix?.kind === wanted);
+        if (fixes.length === 0) {
+          return keep(say("There's nothing of that kind to fix in what I found."));
+        }
+
+        const results: OperationResult[] = [];
+        for (const fix of fixes) {
+          // One sheet at a time: each fix re-reads its own sheet's data extent.
+
+          results.push(await applyHealthFix(fix));
+        }
+        const done = results.filter((result) => result.ok);
+        return clear(
+          resultReply(
+            {
+              ok: done.length > 0,
+              message:
+                done.length > 0
+                  ? `${plural(done.length, "sheet")} sorted.`
+                  : (results[0]?.message ?? "Nothing changed."),
+              details: results.flatMap((result) => [result.message, ...(result.details ?? [])]),
+            },
+            [chip("Check again", "/health"), chip("Undo that", "/undo")]
+          )
+        );
+      }
+
+      const report = await checkWorkbookHealth();
+      if (!report) return keep(say("I couldn't read this workbook."));
+      if (report.findings.length === 0) {
+        return clear(
+          say(summarizeHealth(report), [
+            chip("Check this sheet for mistakes", "/review"),
+            chip("Build a dashboard", "/dashboard"),
+          ])
+        );
+      }
+
+      const chips: Chip[] = [];
+      if (report.findings.some((finding) => finding.fix?.kind === "tightenRanges")) {
+        chips.push(chip("Narrow those ranges", "/health narrow the ranges"));
+      }
+      if (report.findings.some((finding) => finding.fix?.kind === "clearBeyondData")) {
+        chips.push(chip("Clear the empty rows", "/health clear the empty rows"));
+      }
+      chips.push(chip("Leave it", "cancel"));
+
+      return waiting(
+        {
+          content: [
+            {
+              type: "health",
+              summary: summarizeHealth(report),
+              findings: report.findings,
+              sheetsScanned: report.sheetsScanned,
+              sheetsSkipped: report.sheetsSkipped,
+            },
+          ],
+          chips,
+        },
+        { kind: "health", report }
+      );
+    }
+
+    case "protect": {
+      const sheet = intent.sheet ?? workbook.active;
+      if (intent.off) {
+        return clear(resultReply(await clearGuards(sheet)));
+      }
+
+      const proposal = await proposeGuards(sheet);
+      if (!proposal || proposal.guards.length === 0) {
+        return keep(
+          say(summarizeGuards(proposal?.guards ?? [], sheet), [
+            chip("Clean it up first", `/fix ${sheet}`),
+          ])
+        );
+      }
+
+      return waiting(
+        {
+          content: [
+            {
+              type: "guards",
+              sheet: proposal.sheet,
+              rows: proposal.rows,
+              guards: proposal.guards,
+              existingProblems: proposal.existingProblems,
+            },
+          ],
+          chips: [
+            chip(`Add ${plural(proposal.guards.length, "rule")}`, "yes"),
+            chip("Cancel", "cancel"),
+          ],
+        },
+        { kind: "protect", proposal }
+      );
     }
 
     case "unpivot": {
@@ -897,6 +1091,19 @@ async function route(
     }
 
     case "compare": {
+      if (intent.withFile) {
+        const against = intent.first ?? workbook.active;
+        return keep({
+          content: [
+            {
+              type: "text",
+              text: `Pick the file to compare "${against}" against — last month's export, or whatever you were sent. It's read here on this computer and not uploaded anywhere.`,
+            },
+          ],
+          chips: [chip("Compare two sheets instead", "/compare")],
+          pickFile: { purpose: "compare", sheet: against },
+        });
+      }
       let first = intent.first;
       let second = intent.second;
       if (!first || !second) {

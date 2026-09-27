@@ -8,6 +8,7 @@ import {
   DataLine20Regular,
   DataPie20Regular,
   DataScatter20Regular,
+  ArrowUpload20Regular,
   ErrorCircle20Filled,
   Send20Filled,
 } from "@fluentui/react-icons";
@@ -15,6 +16,7 @@ import {
 import {
   AssistantState,
   BotContent,
+  compareAgainstFile,
   BotReply,
   Chip,
   helpGroups,
@@ -25,6 +27,7 @@ import {
 import { CommandInfo, completeCommand, ToolName } from "../features/commands";
 import type { DashChartKind } from "../features/dashboard";
 import { groupIssues, summarize } from "../features/review";
+import { SUPPORTED_EXTENSIONS } from "../shared/workbookReader";
 import { watchSheet, Watcher, WatchUpdate } from "../features/watch";
 import { DISPLAY_FONT } from "../theme";
 
@@ -480,6 +483,33 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenTool }) => {
     []
   );
 
+  // ---------------------------------------------------------------------------
+  // Picking a file to compare against
+  //
+  // An add-in can't reach the file system, so a reply that needs last month's
+  // export asks the pane to open a picker. The file is read here and never
+  // leaves the machine.
+  // ---------------------------------------------------------------------------
+  const [fileRequest, setFileRequest] = React.useState<{ sheet: string } | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const takeFile = React.useCallback(
+    async (file: File | undefined) => {
+      if (!file || !fileRequest) return;
+      const sheet = fileRequest.sheet;
+      setFileRequest(null);
+      setMessages((current) => [
+        ...current,
+        { id: nextId.current++, from: "user", text: file.name },
+      ]);
+      setBusy(true);
+      const reply = await compareAgainstFile(sheet, file);
+      setMessages((current) => [...current, { id: nextId.current++, from: "bot", reply }]);
+      setBusy(false);
+    },
+    [fileRequest]
+  );
+
   const send = React.useCallback(
     async (text: string) => {
       const trimmed = text.trim();
@@ -494,6 +524,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenTool }) => {
       setBusy(false);
       if (reply.openTool) onOpenTool(reply.openTool);
       if (reply.watch) await applyWatch(reply.watch);
+      if (reply.pickFile) {
+        setFileRequest({ sheet: reply.pickFile.sheet });
+        // Opening the picker straight away saves a click, and the button stays
+        // in the composer for anyone who dismisses the dialog.
+        fileInputRef.current?.click();
+      }
       inputRef.current?.focus();
     },
     [busy, state, onOpenTool, applyWatch]
@@ -582,6 +618,27 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenTool }) => {
       </div>
 
       <div className={styles.composer}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={SUPPORTED_EXTENSIONS.join(",")}
+          style={{ display: "none" }}
+          onChange={(event) => {
+            void takeFile(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
+        {fileRequest ? (
+          <Button
+            className={styles.chip}
+            size="small"
+            appearance="primary"
+            icon={<ArrowUpload20Regular />}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Choose the file to compare against
+          </Button>
+        ) : null}
         {popupOpen ? (
           <div className={styles.popup} role="listbox" aria-label="Commands">
             {suggestions.map((info, i) => (
@@ -855,6 +912,80 @@ const Content: React.FC<{ content: BotContent; onCommand: (text: string) => void
           </div>
           <Text className={styles.hint}>
             I&apos;ll write the tidy version to a new sheet. &quot;{content.sheet}&quot; is left exactly as it is.
+          </Text>
+        </>
+      );
+
+    case "guards":
+      return (
+        <>
+          <Text weight="semibold">
+            {content.guards.length} {content.guards.length === 1 ? "rule" : "rules"} for &quot;
+            {content.sheet}&quot;, from what its {content.rows.toLocaleString()} rows already hold
+          </Text>
+          <ul className={styles.list}>
+            {content.guards.map((guard) => (
+              <li key={guard.header} className={styles.item}>
+                <span className={styles.itemText}>
+                  <span className={styles.itemTitle}>{guard.title}</span>
+                  <span className={styles.hint}>{guard.detail}</span>
+                  {content.existingProblems[guard.header] > 0 ? (
+                    <span className={styles.hint}>
+                      {content.existingProblems[guard.header].toLocaleString()} cells already there
+                      would be flagged by this — worth a look before you add it.
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Text className={styles.hint}>
+            Each rule warns rather than blocks, so you can still enter something unusual on purpose,
+            and reaches past today&apos;s rows so it covers what gets typed next.
+          </Text>
+        </>
+      );
+
+    case "health":
+      return (
+        <>
+          <Text weight="semibold">{content.summary}</Text>
+          <ul className={styles.list}>
+            {content.findings.map((finding, i) => (
+              <li key={`${finding.sheet}-${finding.kind}-${i}`} className={styles.item}>
+                <span
+                  className={mergeClasses(
+                    styles.severity,
+                    finding.severity === "slow" && styles.sevWarning,
+                    finding.severity === "fragile" && styles.sevError,
+                    finding.severity === "tidy" && styles.sevTidy
+                  )}
+                  aria-label={
+                    finding.severity === "slow"
+                      ? "Makes it slower"
+                      : finding.severity === "fragile"
+                        ? "Could break quietly"
+                        : "Worth tidying"
+                  }
+                />
+                <span className={styles.itemText}>
+                  <span className={styles.itemTitle}>{finding.title}</span>
+                  <span className={styles.hint}>{finding.detail}</span>
+                  <span className={styles.hint}>
+                    {finding.sheet}
+                    {finding.examples.length > 0 ? ` · ${finding.examples.join(", ")}` : ""}
+                    {finding.fix ? " · fixable" : ""}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Text className={styles.hint}>
+            Looked at {content.sheetsScanned} {content.sheetsScanned === 1 ? "sheet" : "sheets"}.
+            {content.sheetsSkipped.length > 0
+              ? ` Too big to read: ${content.sheetsSkipped.join(", ")}.`
+              : ""}{" "}
+            Nothing has been changed.
           </Text>
         </>
       );

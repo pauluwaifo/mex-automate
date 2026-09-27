@@ -288,6 +288,7 @@ describe("comparing two sheets", () => {
       kind: "compare",
       first: "Jan Orders",
       second: "Feb Orders",
+      withFile: false,
     });
     expect(parse("Feb Orders vs Jan Orders")).toMatchObject({
       first: "Feb Orders",
@@ -306,7 +307,12 @@ describe("comparing two sheets", () => {
   });
 
   it("leaves the sheets unset when none were named", () => {
-    expect(parse("/compare")).toEqual({ kind: "compare", first: null, second: null });
+    expect(parse("/compare")).toEqual({
+      kind: "compare",
+      first: null,
+      second: null,
+      withFile: false,
+    });
   });
 });
 
@@ -374,5 +380,48 @@ describe("watching a sheet", () => {
 
   it("does not hijack a dashboard request that mentions live data", () => {
     expect(parse("build a live dashboard").kind).toBe("dashboard");
+  });
+});
+
+describe("workbook health", () => {
+  it("understands the command and its aliases", () => {
+    expect(parse("/health")).toEqual({ kind: "health", action: "check" });
+    expect(parse("/slow").kind).toBe("health");
+    expect(parse("/speed").kind).toBe("health");
+  });
+
+  it("understands the way people describe a slow file", () => {
+    expect(parse("why is this file so slow").kind).toBe("health");
+    expect(parse("my workbook is really slow").kind).toBe("health");
+    expect(parse("make this faster").kind).toBe("health");
+    expect(parse("what's wrong with this workbook").kind).toBe("health");
+  });
+
+  it("keeps a sheet review separate from a workbook health check", () => {
+    expect(parse("check this sheet").kind).toBe("review");
+    expect(parse("what's wrong with this sheet").kind).toBe("review");
+  });
+
+  it("reads the two repairs", () => {
+    expect(parse("/health narrow the ranges")).toEqual({ kind: "health", action: "narrow" });
+    expect(parse("/health clear the empty rows")).toEqual({ kind: "health", action: "clear" });
+  });
+});
+
+describe("guards and comparing against a file", () => {
+  it("understands /protect and how people ask for it", () => {
+    expect(parse("/protect")).toEqual({ kind: "protect", sheet: null, off: false });
+    expect(parse("/protect off")).toMatchObject({ off: true });
+    expect(parse("stop people typing the wrong region").kind).toBe("protect");
+    expect(parse("add dropdowns").kind).toBe("protect");
+  });
+
+  it("knows when the other side of a comparison is a file", () => {
+    expect(parse("/compare with a file")).toMatchObject({ kind: "compare", withFile: true });
+    expect(parse("compare this against last month's export")).toMatchObject({ withFile: true });
+  });
+
+  it("does not ask for a file when two sheets were named", () => {
+    expect(parse("/compare Jan Orders with Feb Orders")).toMatchObject({ withFile: false });
   });
 });

@@ -183,6 +183,92 @@ export async function compareSheets(request: CompareRequest): Promise<Comparison
 }
 
 /**
+ * Compares a sheet in this workbook against a table read from a file the user
+ * picked - last month's export, the copy accounts sent over, the extract from
+ * the other system.
+ *
+ * This is the shape reconciliation actually takes: the two versions are rarely
+ * both in the workbook you have open. The file is parsed in the task pane, so
+ * it is never uploaded anywhere.
+ */
+export async function compareSheetWithTable(
+  sheetName: string,
+  other: { label: string; grid: Grid },
+  options: { compareOptions?: CompareOptions; writeReport?: boolean; mark?: boolean } = {}
+): Promise<ComparisonOutcome> {
+  const { writeReport = true, mark = true } = options;
+  if (other.grid.length < 2) {
+    return fail(`"${other.label}" doesn't have a heading row and data under it.`);
+  }
+
+  return runExcel(async (context) => {
+    const here = await readTable(context, sheetName);
+    if (!here) return fail(`"${sheetName}" has no table in it to compare.`);
+
+    const fileTable = toHeaderTable(other.grid);
+    // The file is the older version: it is what was sent or exported before,
+    // and the sheet in front of the user is the current one.
+    const diff = compareTables(fileTable, here.table, options.compareOptions);
+
+    const details: string[] = [];
+    details.push(
+      diff.keyColumn
+        ? `Matched rows on "${diff.keyColumn}".`
+        : "No column was unique enough to match rows on, so whole rows were compared. That finds rows added and removed, but not cells edited within a row."
+    );
+    details.push(`"${other.label}" was read on this computer and not uploaded anywhere.`);
+    for (const movement of largestMovements(diff, 3)) {
+      details.push(
+        `${movement.key} - ${movement.header} moved by ${(movement.delta as number).toLocaleString("en-US")}.`
+      );
+    }
+
+    let reportSheet: string | undefined;
+    if (
+      writeReport &&
+      (diff.changed.length > 0 || diff.added.length > 0 || diff.removed.length > 0)
+    ) {
+      const report = diffReportGrid(diff, { first: other.label, second: here.name });
+      const sheet = await createSheetWithUniqueName(context, `${here.name} vs file`);
+      await writeGrid(context, sheet, 0, 0, report.grid);
+      const width = report.grid[0]?.length ?? 1;
+      for (const row of report.headingRows) {
+        const range = sheet.getRangeByIndexes(row, 0, 1, width);
+        range.format.font.bold = true;
+        range.format.font.size = 12;
+      }
+      for (const row of report.tableHeaderRows) {
+        const range = sheet.getRangeByIndexes(row, 0, 1, width);
+        range.format.font.bold = true;
+        range.format.fill.color = "#eef3f1";
+      }
+      sheet.getUsedRange().format.autofitColumns();
+      sheet.activate();
+      await context.sync();
+      reportSheet = sheet.name;
+      details.push(`Full list in "${sheet.name}".`);
+    }
+
+    if (mark && diff.changed.length > 0) {
+      const addresses: string[] = [];
+      for (const change of diff.changed.slice(0, MAX_MARKS)) {
+        const columnAt = here.table.headers.indexOf(change.header);
+        if (columnAt < 0) continue;
+        addresses.push(
+          `${columnLetter(here.columnIndex + columnAt)}${here.bodyRow + change.rowAfter}`
+        );
+      }
+      if (addresses.length > 0) {
+        await markCells(here.name, addresses, "warning");
+        details.push(`Marked ${plural(addresses.length, "changed cell")} in "${here.name}".`);
+      }
+    }
+
+    return { ...ok(summarizeDiff(diff), details), diff, reportSheet };
+  });
+}
+
+/**
  * The two sheets to compare when the user didn't say: the active sheet and the
  * one next to it, which is how monthly files are usually arranged.
  */

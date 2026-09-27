@@ -54,9 +54,15 @@ export const COMMANDS: CommandInfo[] = [
     group: "Main",
   },
   {
+    command: "/health",
+    example: "/health",
+    description: "Why this workbook is slow, and what in it is fragile",
+    group: "Main",
+  },
+  {
     command: "/compare",
     example: "/compare April with May",
-    description: "Find every difference between two sheets",
+    description: "Find every difference between two sheets, or a sheet and a file",
     group: "Main",
   },
   {
@@ -64,6 +70,12 @@ export const COMMANDS: CommandInfo[] = [
     example: "/recipe save month end",
     description: "Remember these steps, and run them again next month",
     group: "Main",
+  },
+  {
+    command: "/protect",
+    example: "/protect",
+    description: "Add rules that stop bad values being typed in",
+    group: "Clean up",
   },
   {
     command: "/unpivot",
@@ -180,8 +192,10 @@ export type Intent =
   | { kind: "hello" }
   | { kind: "fix"; sheet: string | null }
   | { kind: "review"; sheet: string | null }
+  | { kind: "health"; action: "check" | "narrow" | "clear" }
+  | { kind: "protect"; sheet: string | null; off: boolean }
   | { kind: "unpivot"; sheet: string | null }
-  | { kind: "compare"; first: string | null; second: string | null }
+  | { kind: "compare"; first: string | null; second: string | null; withFile: boolean }
   | { kind: "insights"; sheet: string | null }
   | { kind: "explain" }
   | { kind: "recipe"; action: RecipeAction; name: string | null }
@@ -426,6 +440,18 @@ export function parseCommand(input: string, context: ParseContext): Intent {
       case "check":
       case "audit":
         return { kind: "review", sheet: sheetIn(body) };
+      case "health":
+      case "slow":
+      case "speed":
+        return parseHealth(body);
+      case "protect":
+      case "guard":
+      case "rules":
+        return {
+          kind: "protect",
+          sheet: sheetIn(body),
+          off: /\b(off|remove|clear|stop|undo)\b/.test(body.toLowerCase()),
+        };
       case "unpivot":
       case "flatten":
       case "reshape":
@@ -597,6 +623,17 @@ export function parseCommand(input: string, context: ParseContext): Intent {
     return parseCompare(raw, context.sheets);
   }
   if (
+    /\b(protect|guard|validation|dropdowns?)\b/.test(text) ||
+    /stop (people|anyone|them|me|us) (typing|entering|putting)/.test(text) ||
+    /\b(restrict|limit) what (can be |is )?(typed|entered)/.test(text)
+  ) {
+    return {
+      kind: "protect",
+      sheet,
+      off: /\b(off|remove|clear|stop having|no more)\b/.test(text),
+    };
+  }
+  if (
     /\b(unpivot|flatten|unstack|reshape)\b/.test(text) ||
     // "the months are in columns", "months across the top", "columns into rows".
     /\b(months?|quarters?|years?|periods?)\b.*\b(columns?|across the top)\b/.test(text) ||
@@ -609,6 +646,16 @@ export function parseCommand(input: string, context: ParseContext): Intent {
     /\bwhat (does|do)\b.*\b(show|say|mean|tell me|look like)\b/.test(text)
   ) {
     return { kind: "insights", sheet };
+  }
+  // "why is this file so slow" is a question about the whole workbook, so it is
+  // read before the rule that checks a single sheet.
+  if (
+    /\b(workbook|file|spreadsheet)\b.*\b(slow|sluggish|laggy|heavy|bloated|big)\b/.test(text) ||
+    /\b(slow|sluggish|laggy|heavy|bloated)\b.*\b(file|workbook|excel|spreadsheet)\b/.test(text) ||
+    /\bhealth\b|\bspeed (it|this) up\b|\bmake (it|this) faster\b/.test(text) ||
+    /what'?s wrong with (this|my) (workbook|file|spreadsheet)/.test(text)
+  ) {
+    return parseHealth(text);
   }
   if (
     /\b(review|check|audit|proof ?read)\b/.test(text) ||
@@ -669,6 +716,18 @@ function parseCase(text: string): Intent {
   return { kind: "case", mode: null };
 }
 
+/** "/health", "/health narrow the ranges", "/health clear the empty rows". */
+function parseHealth(body: string): Intent {
+  const text = body.toLowerCase();
+  if (/\b(narrow|tighten|shorten)\b|\bfix\b.*\b(range|column|formula)/.test(text)) {
+    return { kind: "health", action: "narrow" };
+  }
+  if (/\b(clear|remove|delete|trim)\b.*\b(blank|empty|spare|extra|row)/.test(text)) {
+    return { kind: "health", action: "clear" };
+  }
+  return { kind: "health", action: "check" };
+}
+
 function parseOnOff(text: string): boolean | null {
   const lower = text.toLowerCase();
   if (/\b(off|stop|no|don'?t)\b/.test(lower)) return false;
@@ -687,6 +746,8 @@ function parseCompare(body: string, sheets: readonly string[]): Intent {
     kind: "compare",
     first: named[0] ?? null,
     second: named[1] ?? null,
+    // "compare this with last month's file" needs a file picker, not a sheet.
+    withFile: /\b(file|csv|export|workbook|\.xlsx)\b/i.test(body) && named.length < 2,
   };
 }
 
